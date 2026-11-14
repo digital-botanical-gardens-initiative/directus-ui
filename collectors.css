@@ -1,18 +1,31 @@
 .collectors { color: var(--text, #232d24); }
 .collectors__note { max-width: 76ch; color: var(--muted, #566052); }
+.collectors__filters { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin: 1rem 0; }
+.collectors__filter { display: flex; flex-direction: column; gap: .2rem; min-width: min(100%, 12rem); color: var(--muted, #566052); font-size: .9rem; }
+.collectors__filter input, .collectors__filter select { width: 100%; min-height: 2.35rem; padding: .35rem .5rem; border: 1px solid var(--line, #ddd8ca); border-radius: .3rem; background: #fff; color: var(--text, #232d24); font: inherit; }
 .collectors__list, .collectors__samples { list-style: none; padding: 0; }
 .collectors__list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: .9rem; counter-reset: rank; }
-.collectors__item { counter-increment: rank; min-width: 0; }
+.collectors__item { counter-increment: rank; min-width: 0; display: flex; flex-direction: column; }
 .collectors__card, .collectors__sample { display: flex; flex-direction: column; gap: .35rem; border: 1px solid var(--line, #ddd8ca); border-radius: .75rem; padding: 1rem; background: var(--soft, #faf7f0); }
-.collectors__card { height: 100%; color: inherit; text-decoration: none; }
+.collectors__card { flex: 1; color: inherit; text-decoration: none; }
 .collectors__card:hover, .collectors__card:focus-visible { border-color: var(--green, #3e503c); box-shadow: 0 0 0 2px var(--green, #3e503c); }
 .collectors__name { font-size: 1.15rem; overflow-wrap: anywhere; }
 .collectors__name::before { content: counter(rank) '. '; color: var(--muted, #566052); }
+.collectors__card-heading,.collectors__person-header { display: flex; align-items: center; gap: .85rem; min-width: 0; }
+.collectors__portrait { position: relative; flex: none; display: grid; place-items: center; width: 3.7rem; height: 3.7rem; border-radius: 50%; overflow: hidden; background: #e3dcfa; color: #4b28d8; font-weight: 750; font-size: 1.15rem; }
+.collectors__portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.collectors__person-header .collectors__portrait { width: 6.4rem; height: 6.4rem; font-size: 1.8rem; }
+.collectors__person-identity { min-width: 0; }
+.collectors__person-identity p { margin: .2rem 0; }
 .collectors__identity, .collectors__sample-id { color: var(--muted, #566052); font-size: .9rem; }
 .collectors__count { font-weight: 700; font-variant-numeric: tabular-nums; }
 .collectors__track { display: block; height: .8rem; margin-top: .4rem; border-radius: 1rem; background: #e1e5da; overflow: hidden; }
 .collectors__bar { display: block; height: 100%; border-radius: inherit; background: #425e3d; }
 .collectors__source { display: inline-block; margin: .7rem 0; font-size: .9rem; overflow-wrap: anywhere; }
+.collectors__profile-links { display: flex; flex-wrap: wrap; gap: .25rem .85rem; align-items: center; padding: .35rem .2rem; font-size: .84rem; }
+.collectors__profile-links a { overflow-wrap: anywhere; }
+.collectors__detail > .collectors__profile-links { margin: 0 0 .85rem; }
+.collectors__photo-credit { margin: .2rem 0 .8rem; color: var(--muted); font-size: .78rem; }
 .collectors__back { display: inline-block; margin-bottom: 1rem; }
 .collectors__detail h2 { margin: 0; overflow-wrap: anywhere; }
 .collectors__samples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: .8rem; margin: 1rem 0; }
@@ -39,6 +52,7 @@
 .collectors__map { width: 100%; height: clamp(24rem, 58vw, 38rem); border: 1px solid var(--line); background: var(--soft); }
 .collectors__map-note, .collectors__map-status { color: var(--muted); }
 .collectors__map .sample-cluster { background: #6644ff; color: white; border: 0; }
+#collector-detail .collectors__map .sample-cluster,#taxon-map-panel .collectors__map .sample-cluster{display:flex;align-items:center;justify-content:center;line-height:1}
 .collectors__map .sample-point { display: block; border: 0; border-radius: 50%; background: #6644ff; box-shadow: none; }
 .collectors__map .sample-point:hover { background: #4b28d8; }
 .collectors__map .sample-cluster:hover { background: #4b28d8; }

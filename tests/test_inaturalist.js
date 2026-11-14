@@ -125,6 +125,39 @@ test("review filters and selects locally without writing or network access", () 
   assert.equal(root.findAll("tbody")[0].findAll("tr").length, 0);
 });
 
+test("review orders the full matched set before its 200-row window and retains offscreen selections", () => {
+  const root = new Node("section");
+  const rows = Array.from({length: 201}, (_, index) =>
+    [...disagreement.slice(0, 2), 1000 + index, ...disagreement.slice(3, 13),
+      index === 200 ? "Distinct review reason" : disagreement[13], []]);
+  inat.renderReview(root, {...data, rows}, {rows: [[91]]});
+  const body = root.findAll("tbody")[0];
+  const count = root.findAll("p").find((item) => item.attrs["aria-live"] === "polite" &&
+    item.textContent.includes("observations shown"));
+  const checkbox = body.findAll("tr")[0].findAll("input")[0];
+  checkbox.checked = true;
+  checkbox.listeners.change();
+  const order = root.findAll("select")[1];
+  order.value = "2:desc";
+  order.listeners.change();
+  assert.equal(body.findAll("tr").length, 200);
+  assert.match(count.textContent, /201 of 201/);
+  assert.equal(body.findAll("tr")[0].findAll("a").find((a) => a.href.includes("/observations/")).href,
+    "https://www.inaturalist.org/observations/1200");
+  assert.equal(body.findAll("input").some((input) => input.checked), false);
+  const search = root.findAll("input").find((item) => item.type === "search");
+  search.value = "Distinct review reason";
+  search.listeners.input();
+  assert.equal(body.findAll("tr").length, 1);
+  assert.match(count.textContent, /1 of 201/);
+  search.value = "1000";
+  search.listeners.input();
+  assert.equal(body.findAll("tr")[0].findAll("input")[0].checked, true);
+  assert.match(root.textContent, /1 selected for review/);
+  assert.equal(body.findAll("tr")[0].findAll("a").find((a) => a.href.includes("/observations/")).href,
+    "https://www.inaturalist.org/observations/1000");
+});
+
 test("unavailable and empty snapshots are displayed without ghost observations", () => {
   const root = new Node("section");
   assert.equal(inat.renderSample(root, "dbgi_000037", null), 0);

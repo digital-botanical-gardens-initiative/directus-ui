@@ -41,6 +41,28 @@ class CollectorsExportTests(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(result))
         self.assertNotIn("Unlinked Name", json.dumps(result))
 
+    def test_verified_directus_profiles_and_reviewed_dbgi_team_page(self):
+        field_rows = [
+            {"id": field_id, "sample_id": f"sample-{field_id}",
+             "collector_ref": 25 if field_id == 10 else None}
+            for field_id in range(10, 15)
+        ]
+        person = {"id": 25, "full_name": "Mazzarine Laboureau",
+                  "orcid": "0009-0006-7011-4195", "inat": "@mazzarinel",
+                  "email": "do-not-publish@example.org"}
+        result = collectors.collect(sample_snapshot(), field_rows, [person], BASE)
+        self.assertEqual(result["collectors"], [{
+            "id": 25, "name": "Mazzarine Laboureau", "field_ids": [10],
+            "orcid": "0009-0006-7011-4195", "inat": "mazzarinel",
+            "dbgi_profile": "https://www.dbgi.org/team/laboureau-mazzarine/",
+            "portrait": "assets/collectors/25.webp",
+        }])
+        self.assertNotIn("do-not-publish", json.dumps(result))
+        invalid = {**person, "full_name": "Different person", "orcid": "0000-0001-8845",
+                   "inat": "https://untrusted.test/attacker"}
+        self.assertEqual(collectors.collect(sample_snapshot(), field_rows, [invalid], BASE)["collectors"],
+                         [{"id": 25, "name": "Different person", "field_ids": [10]}])
+
     def test_snapshot_mismatch_or_missing_published_row_aborts_without_writing(self):
         fields = [{"id": row[0], "sample_id": row[1], "collector_ref": None}
                   for row in sample_snapshot()["rows"]]

@@ -54,9 +54,10 @@
 .inat-recorded summary { cursor: pointer; color: #465f55; }
 .inat-recorded p, .inat-source { margin: 0.35rem 0; font-size: 0.84rem; }
 .inat-summary { font-weight: 700; }
-.inat-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
-.inat-controls label { display: grid; gap: 0.35rem; min-width: min(18rem, 100%); }
-.inat-controls input, .inat-controls select { max-width: 100%; padding: 0.45rem; }
+.inat-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 0.65rem 1rem; margin: 1rem 0; }
+.inat-controls label { display: grid; gap: 0.35rem; min-width: min(12rem, 100%); font-size: 0.9rem; }
+.inat-controls label:first-child { min-width: min(18rem, 100%); }
+.inat-controls input, .inat-controls select { max-width: 100%; padding: 0.45rem; font: inherit; }
 .inat-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .inat-table th, .inat-table td { padding: 0.6rem; border-bottom: 1px solid #d9dfd9; text-align: left; vertical-align: top; }
 .inat-table td:first-child { text-align: center; }

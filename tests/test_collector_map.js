@@ -107,12 +107,36 @@ test("empty and unavailable maps retain species-list fallback without loading or
     loadLeaflet: () => { loads++; return Promise.resolve(); }, renderScientificTaxon() {}});
   await empty.ready;
   assert.equal(loads, 0);
-  assert.match(root.textContent, /No resolved species samples have valid coordinates/);
+  assert.match(root.textContent, /No .* samples have valid coordinates/);
   empty.destroy();
   const failed = mount({root, observations: [observation(1, 7.1, 46.8)],
     loadLeaflet: () => Promise.reject(new Error("Map stylesheet could not load")),
     renderScientificTaxon() {}});
   await failed.ready;
-  assert.match(root.textContent, /Map stylesheet could not load\. The species list remains available/);
+  assert.match(root.textContent, /Map stylesheet could not load/);
   failed.destroy();
+});
+
+test("a genus map retains every descendant sample and links genus-resolved and species-resolved points correctly", async () => {
+  const {api, map, markers} = fakeLeaflet();
+  global.L = api;
+  const root = new Element("div");
+  const genus = [2984, "8W2YL", "Quercus", "L.", "genus", null];
+  const species = [2990, "COL-Q", "Quercus robur", "L.", "species", 2984];
+  const observations = [
+    {...observation(11, 7.1, 46.8), taxon: genus},
+    {...observation(12, 7.1, 46.8), taxon: species},
+  ];
+  const controller = mount({root, observations, loadLeaflet: () => Promise.resolve(),
+    renderScientificTaxon: (parent, entry) => parent.append(entry[2]),
+    scopeLabel: "Quercus", taxonHref: (entry) => `#${entry[4] === "species" ? "species" : "taxon"}/${entry[0]}`});
+  await controller.ready;
+  while (map.getZoom() < 19) markers[0].click();
+  const points = markers.filter((item) => item.kind === "marker");
+  assert.equal(points.length, 2);
+  points[0].click();
+  assert.deepEqual(api.lastPopup.content.findAll("a").map((link) => link.href), ["#taxon/2984", "#sample/11"]);
+  points[1].click();
+  assert.deepEqual(api.lastPopup.content.findAll("a").map((link) => link.href), ["#species/2990", "#sample/12"]);
+  controller.destroy();
 });

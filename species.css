@@ -1,7 +1,7 @@
-#species-view .back{margin-bottom:1rem}
-#species-view .section-heading{align-items:start}
-#species-view .section-heading h2{margin:.2rem 0}
-#species-view #species-summary{margin:.45rem 0 0}
+#species-view .back,#taxon-view .back{margin-bottom:1rem}
+#species-view .section-heading,#taxon-view .section-heading{align-items:start}
+#species-view .section-heading h2,#taxon-view .section-heading h2{margin:.2rem 0}
+#species-view #species-summary,#taxon-view #taxon-summary{margin:.45rem 0 0}
 .species-intro{max-width:62rem;color:var(--muted)}
 #species-ms{max-width:25rem;padding:.8rem 1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--soft);font-size:.88rem}
 #species-ms p{margin:.35rem 0 0}
@@ -22,3 +22,23 @@
 .stage-badge--ms{color:#225a43;background:#dff2e6;border-color:#c4e2ce}
 .stage-badge--unknown{color:var(--muted);background:#f4f3f0;border-color:var(--line)}
 @media(max-width:43rem){#species-ms{max-width:none;width:100%}}
+#species-col,#taxon-col{margin:1.2rem 0 1.5rem;padding:1rem 1.15rem;border:1px solid var(--line);border-radius:.8rem;background:var(--soft)}
+.taxon-lineage{display:flex;flex-wrap:wrap;gap:.25rem .45rem;align-items:baseline;overflow-wrap:anywhere;font-size:.9rem}
+#species-col p,#taxon-col p{margin:.55rem 0;font-size:.88rem}
+#taxon-filter-count{margin:-.65rem 0 0;color:var(--muted);font-size:.9rem}
+#taxon-pager[hidden]{display:none}
+#taxon-map-panel .collectors__map{width:100%;height:clamp(24rem,58vw,38rem);border:1px solid var(--line);background:var(--soft)}
+#taxon-map-panel .sample-cluster{background:#6644ff;color:white;border:0}
+#taxon-map-panel .sample-point{display:block;border:0;border-radius:50%;background:#6644ff;box-shadow:none}
+#taxon-map-panel .collectors__map-note,#taxon-map-panel .collectors__map-status{color:var(--muted)}
+.taxon-browse-link{margin-left:.6rem;font-size:.83rem;white-space:nowrap}
+#species-inat:not([hidden]){margin:1.2rem 0 1.5rem;padding:1.1rem 1.2rem;border:1px solid var(--line);border-radius:.85rem;background:var(--soft)}
+#species-inat h3{margin:0 0 .35rem}
+.species-inat__note,.species-inat__status{color:var(--muted);font-size:.9rem}
+.species-inat__note{margin:.3rem 0 .8rem}
+.species-inat__source{margin:.5rem 0 .85rem}
+.species-inat__gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,11rem),1fr));gap:.75rem;max-width:73rem}
+.species-inat__photo{min-width:0;margin:0;border:1px solid var(--line);border-radius:.65rem;overflow:hidden;background:var(--soft)}
+.species-inat__photo a{display:block}
+.species-inat__photo img{display:block;width:100%;height:10rem;object-fit:contain}
+.species-inat__photo figcaption{padding:.55rem .65rem;color:var(--muted);font-size:.72rem;line-height:1.35;overflow-wrap:anywhere}

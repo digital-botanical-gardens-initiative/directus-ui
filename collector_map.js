@@ -1,6 +1,6 @@
 "use strict";
 
-/* Map only the collector's resolved species observations at their recorded GeoJSON points. */
+/* Map resolved field samples for a collector or Taxa lineage at their recorded GeoJSON points. */
 (function () {
   const ZOOM_PRECISE = 19;
   const number = new Intl.NumberFormat("en");
@@ -18,13 +18,14 @@
     return result;
   }
 
-  function mount({root, observations, loadLeaflet, renderScientificTaxon}) {
+  function mount({root, observations, loadLeaflet, renderScientificTaxon,
+    scopeLabel = "species", taxonHref = (taxon) => `#species/${taxon[0]}`}) {
     const located = observations.filter(({row}) => point(row));
     root.replaceChildren();
-    node("p", `${number.format(located.length)} geolocated species ${located.length === 1 ? "sample" : "samples"}. Points use recorded coordinates; aggregates split one zoom level per click, and individual samples appear at maximum zoom.`, root, "collectors__map-note");
+    node("p", `${number.format(located.length)} geolocated ${scopeLabel} ${located.length === 1 ? "sample" : "samples"}. Points use recorded coordinates; aggregates split one zoom level per click, and individual samples appear at maximum zoom.`, root, "collectors__map-note");
     const surface = node("div", "", root, "collectors__map");
     surface.setAttribute("role", "region");
-    surface.setAttribute("aria-label", "Map of this collector's species samples");
+    surface.setAttribute("aria-label", `Map of ${scopeLabel} samples`);
     const status = node("p", "", root, "collectors__map-status");
     status.setAttribute("role", "status");
     let active = true;
@@ -36,7 +37,7 @@
       const popup = node("div", "", null);
       const species = node("a", "", popup);
       renderScientificTaxon(species, taxon);
-      species.href = `#species/${taxon[0]}`;
+      species.href = taxonHref(taxon);
       const sample = node("p", "", popup);
       const sampleLink = node("a", row[1], sample);
       sampleLink.href = `#sample/${row[0]}`;
@@ -89,7 +90,7 @@
         const marker = L.marker(location, {
           icon: count > 1 && !precise ? L.divIcon({className: "sample-cluster", html: `<span>${count}</span>`, iconSize: [size, size]}) :
             L.divIcon({className: "sample-point", iconSize: [8, 8]}),
-          title: count === 1 ? `${first.row[1]} · ${first.taxon[2]}` : `${number.format(count)} species samples`,
+          title: count === 1 ? `${first.row[1]} · ${first.taxon[2]}` : `${number.format(count)} ${scopeLabel} samples`,
         }).addTo(layer);
         marker.on("click", () => {
           if (count > 1 && !precise) {
@@ -120,9 +121,9 @@
       map.fitBounds(bounds, {padding: [24, 24], maxZoom: 14, animate: false});
       render();
     }).catch((error) => {
-      if (active) status.textContent = `${error.message}. The species list remains available.`;
+      if (active) status.textContent = `${error.message}. The sample list remains available.`;
     }) : Promise.resolve().then(() => {
-      status.textContent = "No resolved species samples have valid coordinates. The list remains available.";
+      status.textContent = `No ${scopeLabel} samples have valid coordinates. The list remains available.`;
     });
 
     return {ready, destroy() {

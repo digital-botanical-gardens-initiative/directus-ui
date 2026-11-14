@@ -49,7 +49,7 @@ jobs:
       - name: Stage static site
         run: |
           mkdir -p site/data
-          cp index.html app.js styles.css species.css processing.js processing.css hero.css scientific_names.js garden_progress.js garden_progress.css garden_badges.js garden_badges.css sample_weather.js sample_weather.css inaturalist.js inaturalist.css metabolome.js metabolome.css chemcalc.js chemcalc.css ms_profile.js ms_profile.css gnps_dashboard.js gnps_dashboard.css collectors.js collectors.css collector_map.js site/
+          cp index.html app.js styles.css species.css species_inat.js processing.js processing.css hero.css scientific_names.js garden_progress.js garden_progress.css garden_badges.js garden_badges.css sample_weather.js sample_weather.css inaturalist.js inaturalist.css metabolome.js metabolome.css chemcalc.js chemcalc.css ms_profile.js ms_profile.css gnps_dashboard.js gnps_dashboard.css collectors.js collectors.css collector_map.js site/
           cp -R assets site/assets
           cp data/samples.json data/collectors.json data/processing.json data/garden_progress.json data/gardens.json data/inaturalist.json data/wikidata_taxa.json data/ms_profile.json site/data/
       - uses: actions/configure-pages@v5

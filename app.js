@@ -26,6 +26,12 @@ const speciesByTaxon = new Map();
 const speciesRows = new Map();
 let speciesPage = 0;
 let selectedSpeciesId = null;
+let selectedTaxonPageId = null;
+let taxonPage = 0;
+let taxonRows = [];
+let visibleTaxonRows = [];
+let taxonView = "cards";
+let taxonMapController;
 const familyByTaxon = new Map();
 let directusBase = "";
 let sampleSnapshot;
@@ -84,6 +90,9 @@ function catalogueLink(parent, taxon, label = "Catalogue of Life ↗") {
   link.setAttribute("aria-label", `Open ${taxon[2]} on Catalogue of Life`);
   return link;
 }
+function taxonHref(taxon) {
+  return `#${taxon[4] === "species" ? "species" : "taxon"}/${taxon[0]}`;
+}
 function lineage(id) {
   const path = [];
   const seen = new Set();
@@ -95,6 +104,28 @@ function lineage(id) {
     id = taxon[5];
   }
   return path.reverse();
+}
+function belongsToTaxon(id, ancestorId) {
+  while (id != null) {
+    if (id === ancestorId) return true;
+    id = taxaById.get(id)?.[5];
+  }
+  return false;
+}
+
+function renderTaxonClassification(root, taxon) {
+  root.replaceChildren();
+  const trail = element("nav", "", root, "taxon-lineage");
+  trail.setAttribute("aria-label", "Directus Taxa ancestry");
+  for (const ancestor of lineage(taxon[0])) {
+    if (trail.childNodes.length) trail.append(" › ");
+    const link = element("a", "", trail);
+    scientificTaxon(link, ancestor);
+    link.href = taxonHref(ancestor);
+    if (ancestor[0] === taxon[0]) link.setAttribute("aria-current", "page");
+  }
+  element("p", "Classification follows Directus Taxa. The public CoL page is an external reference, not the source of sample grouping.", root, "muted");
+  catalogueLink(root, taxon, "Open this taxon in Catalogue of Life ↗");
 }
 function familyOf(id) {
   if (id == null) return null;
@@ -157,6 +188,12 @@ function show(view) {
     $("species-chemcalc").replaceChildren();
     $("species-chemcalc").hidden = true;
   }
+  if (view !== "species") $("species-col").replaceChildren();
+  if (view !== "taxon") $("taxon-col").replaceChildren();
+  if (view !== "taxon") {
+    taxonMapController?.destroy();
+    taxonMapController = null;
+  }
   document.querySelector(".hero").hidden = view !== "home";
   for (const section of document.querySelectorAll(".view")) section.hidden = section.id !== `${view}-view`;
   for (const link of document.querySelectorAll("nav a")) {
@@ -172,8 +209,8 @@ function show(view) {
     inaturalistPromise = loadInaturalist();
   }
   if ((view === "detail" || view === "species") && !wikidataPromise) wikidataPromise = loadWikidataTaxa();
-  if (["detail", "species", "samples"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
-  if (["detail", "species", "samples"].includes(view) && !processingPromise) processingPromise = loadProcessing();
+  if (["detail", "species", "taxon", "samples"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
+  if (["detail", "species", "taxon", "samples"].includes(view) && !processingPromise) processingPromise = loadProcessing();
 }
 
 async function showCollectors(hash) {
@@ -251,6 +288,30 @@ function route() {
     setTimeout(() => scrollTo(0, 0), 0);
     return;
   }
+  if (hash.startsWith("taxon/")) {
+    const id = Number(hash.slice(6));
+    const taxon = Number.isSafeInteger(id) && id > 0 ? taxaById.get(id) : undefined;
+    if (taxon && taxon[4] !== "species") {
+      $("status").textContent = "";
+      if (selectedTaxonPageId !== id) {
+        taxonPage = 0;
+        $("taxon-query").value = "";
+        $("taxon-project").value = "";
+        $("taxon-rank").value = "";
+        $("taxon-sort").value = "source";
+        $("taxon-profiled").checked = false;
+      }
+      selectedTaxonPageId = id;
+      renderUpperTaxon(taxon);
+      show("taxon");
+      setTimeout(() => scrollTo(0, 0), 0);
+      return;
+    }
+    $("status").textContent = "Taxon not found in this Directus snapshot.";
+    show("samples");
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
   if (hash === "collectors" || hash.startsWith("collector/")) {
     $("status").textContent = "";
     show(hash === "collectors" ? "collectors" : "collector");
@@ -299,6 +360,52 @@ function renderCountBar(parent, count, maximum) {
   element("span", format(count), bar, "count-bar-value");
 }
 
+function addTableControls(table, name) {
+  if (!table || table.dataset.filterable) return;
+  table.dataset.filterable = "true";
+  const original = [...table.tBodies[0].rows];
+  const headings = [...table.tHead.rows[0].cells];
+  const controls = element("div", "", null, "filters table-filters");
+  const searchLabel = element("label", `Filter ${name}`, controls);
+  const search = element("input", "", searchLabel);
+  search.type = "search";
+  search.autocomplete = "off";
+  const sortLabel = element("label", `Order ${name} by`, controls);
+  const order = element("select", "", sortLabel);
+  element("option", "Original order", order).value = "";
+  for (const [index, heading] of headings.entries()) {
+    if (["Progress", "Catalogue of Life", "Directus"].includes(heading.textContent)) continue;
+    const numeric = heading.classList.contains("number") ||
+      ["Collected", "Extracted", "Profiled"].includes(heading.textContent);
+    element("option", `${heading.textContent} ${numeric ? "low to high" : "A–Z"}`, order).value = `${index}:asc`;
+    element("option", `${heading.textContent} ${numeric ? "high to low" : "Z–A"}`, order).value = `${index}:desc`;
+  }
+  const count = element("span", "", controls, "muted");
+  count.setAttribute("role", "status");
+  table.parentElement.before(controls);
+  function apply() {
+    const query = search.value.trim().toLocaleLowerCase();
+    const matches = original.filter((row) => !query || row.textContent.toLocaleLowerCase().includes(query));
+    if (order.value) {
+      const [index, direction] = order.value.split(":");
+      const numeric = headings[Number(index)].classList.contains("number") ||
+        ["Collected", "Extracted", "Profiled"].includes(headings[Number(index)].textContent);
+      matches.sort((a, b) => {
+        const left = a.cells[Number(index)].textContent;
+        const right = b.cells[Number(index)].textContent;
+        const result = numeric ? Number(left.replace(/[^0-9.,].*$/, "").replaceAll(",", "")) -
+          Number(right.replace(/[^0-9.,].*$/, "").replaceAll(",", "")) : sampleCollator.compare(left, right);
+        return direction === "desc" ? -result : result;
+      });
+    }
+    table.tBodies[0].replaceChildren(...matches);
+    count.textContent = `${format(matches.length)} of ${format(original.length)} rows`;
+  }
+  search.addEventListener("input", apply);
+  order.addEventListener("change", apply);
+  apply();
+}
+
 function explore() {
   const body = $("project-rows");
   body.replaceChildren();
@@ -333,24 +440,42 @@ function explore() {
       selectedTaxonId = id; selectedTreemapTaxa = null; $("query").value = resolvedName(taxon);
       $("project").value = ""; $("family-query").value = ""; filter();
     });
+    const browse = element("a", "Taxon page →", cell, "taxon-browse-link");
+    browse.href = taxonHref(taxon);
     element("td", taxon[4], tr);
     element("td", familyOf(id)?.[2] || "—", tr);
     renderCountBar(element("td", "", tr, "number"), count, maximum);
     catalogueLink(element("td", "", tr), taxon, "Open ↗");
   }
+  addTableControls($("project-rows").closest("table"), "garden and project rows");
+  addTableControls($("taxon-rows").closest("table"), "most-collected taxon rows");
 }
 
 function renderFamilies() {
-  const pageCount = Math.ceil(families.length / FAMILY_PAGE_SIZE);
+  const query = $("family-table-query").value.trim().toLocaleLowerCase();
+  const order = $("family-table-sort").value;
+  const visible = query ? families.filter((family) => taxaById.get(family.id)[2].toLocaleLowerCase().includes(query)) :
+    order === "count-desc" ? families : [...families];
+  if (order !== "count-desc") {
+    const key = order.replace("-desc", "");
+    const direction = order.endsWith("-desc") ? -1 : 1;
+    visible.sort((a, b) => {
+      const comparison = key === "name" ?
+        sampleCollator.compare(taxaById.get(a.id)[2], taxaById.get(b.id)[2]) :
+        key === "taxa" ? a.taxa.size - b.taxa.size : a.count - b.count;
+      return direction * comparison || a.id - b.id;
+    });
+  }
+  const pageCount = Math.ceil(visible.length / FAMILY_PAGE_SIZE);
   familyPage = Math.max(0, Math.min(familyPage, Math.max(0, pageCount - 1)));
   $("family-previous").disabled = familyPage === 0;
   $("family-next").disabled = familyPage >= pageCount - 1;
-  $("family-page-label").textContent = families.length ?
-    `${format(familyPage * FAMILY_PAGE_SIZE + 1)}–${format(Math.min((familyPage + 1) * FAMILY_PAGE_SIZE, families.length))} of ${format(families.length)} families` :
-    "No resolved families";
+  $("family-page-label").textContent = visible.length ?
+    `${format(familyPage * FAMILY_PAGE_SIZE + 1)}–${format(Math.min((familyPage + 1) * FAMILY_PAGE_SIZE, visible.length))} of ${format(visible.length)} families` :
+    "No matching families";
   const familyBody = $("family-rows");
   familyBody.replaceChildren();
-  for (const family of families.slice(familyPage * FAMILY_PAGE_SIZE, (familyPage + 1) * FAMILY_PAGE_SIZE)) {
+  for (const family of visible.slice(familyPage * FAMILY_PAGE_SIZE, (familyPage + 1) * FAMILY_PAGE_SIZE)) {
     const tr = element("tr", "", familyBody);
     const cell = element("td", "", tr);
     const link = element("a", taxaById.get(family.id)[2], cell);
@@ -359,6 +484,8 @@ function renderFamilies() {
       selectedTaxonId = null; selectedTreemapTaxa = null; $("project").value = ""; $("query").value = "";
       $("family-query").value = taxaById.get(family.id)[2]; filter();
     });
+    const browse = element("a", "Family page →", cell, "taxon-browse-link");
+    browse.href = `#taxon/${family.id}`;
     renderCountBar(element("td", "", tr, "number"), family.count, families[0].count);
     element("td", format(family.taxa.size), tr, "number");
     catalogueLink(element("td", "", tr), taxaById.get(family.id), "Open ↗");
@@ -478,6 +605,10 @@ function renderTreemapDetail(node) {
   } else title.textContent = node.label;
   element("span", `${format(node.count)} resolved sample${node.count === 1 ? "" : "s"}`, panel);
   if (node.taxon) catalogueLink(panel, node.taxon, "Open in Catalogue of Life ↗");
+  if (node.taxon) {
+    const browse = element("a", "Browse this taxon →", panel);
+    browse.href = taxonHref(node.taxon);
+  }
   if (!node.count) return;
   const link = element("a", `View ${format(node.count)} samples →`, panel);
   link.href = "#samples";
@@ -552,6 +683,40 @@ function renderTreemap() {
   renderTreemapDetail(treemapSelected || treemapCurrent);
 }
 
+const sampleCollator = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
+function sampleSearchMatches(row, query) {
+  if (!query) return true;
+  return [row[1], row[3], resolvedName(taxaById.get(row[7])), familyOf(row[7])?.[2],
+    projectName(row[2]), gardenByProject.get(row[2])?.name, row[6]]
+    .some((value) => String(value || "").toLocaleLowerCase().includes(query));
+}
+function sortedSamples(items, order) {
+  if (order === "source") return items;
+  const descending = order.endsWith("-desc");
+  const field = descending ? order.slice(0, -5) : order;
+  const key = (row) => {
+    switch (field) {
+      case "sample": return row[1];
+      case "taxon": return resolvedName(taxaById.get(row[7]));
+      case "field": return row[3] || "";
+      case "family": return familyOf(row[7])?.[2] || "";
+      case "project": return projectName(row[2]);
+      case "date": return row[6] || "";
+      case "profiled": return msProfileIndex?.byField.has(row[0]) ? 1 : 0;
+      default: return row[1];
+    }
+  };
+  const entries = items.map((row) => ({row, value: key(row)}));
+  entries.sort((a, b) => {
+    if (a.value === "" || b.value === "") return (a.value === "") - (b.value === "") || a.row[0] - b.row[0];
+    const comparison = typeof a.value === "number" ? a.value - b.value : sampleCollator.compare(a.value, b.value);
+    return (descending ? -comparison : comparison) || a.row[0] - b.row[0];
+  });
+  return entries.map((entry) => entry.row);
+}
+function displayCollectionDate(raw) {
+  return /^\d{14}$/.test(raw || "") ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : "—";
+}
 function filter({keepMapSelection = false} = {}) {
   if (!keepMapSelection) mapSelection = null;
   const query = $("query").value.trim().toLocaleLowerCase();
@@ -560,15 +725,13 @@ function filter({keepMapSelection = false} = {}) {
   const profiledOnly = $("profiled-only").checked;
   const matchingFamilies = familyQuery ? new Set(families.filter((entry) =>
     taxaById.get(entry.id)[2].toLocaleLowerCase().includes(familyQuery)).map((entry) => entry.id)) : null;
-  filtered = rows.filter((row) => projectMatches(row[2], project) &&
+  filtered = sortedSamples(rows.filter((row) => projectMatches(row[2], project) &&
     (!matchingFamilies || matchingFamilies.has(familyOf(row[7])?.[0])) &&
     (!selectedTreemapTaxa || selectedTreemapTaxa.has(row[7])) &&
     (!mapSelection || mapSelection.has(row[0])) &&
     (!profiledOnly || msProfileIndex?.byField.has(row[0])) &&
-    (!query || (selectedTaxonId != null ? row[7] === selectedTaxonId :
-      row[1].toLocaleLowerCase().includes(query) ||
-      (row[3] || "").toLocaleLowerCase().includes(query) ||
-      resolvedName(taxaById.get(row[7])).toLocaleLowerCase().includes(query))));
+    (selectedTaxonId != null ? row[7] === selectedTaxonId : sampleSearchMatches(row, query))),
+  $("sample-sort").value);
   page = 0;
   renderPage();
   const located = filtered.reduce((count, row) => count + (Number.isFinite(row[4]) && Number.isFinite(row[5]) ? 1 : 0), 0);
@@ -589,21 +752,24 @@ function renderPage() {
   $("empty").hidden = filtered.length !== 0;
   const body = $("sample-rows");
   body.replaceChildren();
-  for (const row of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
-    const tr = element("tr", "", body);
-    const cell = element("td", "", tr);
-    const link = element("a", row[1], cell);
-    link.href = `#sample/${row[0]}`;
-    const taxonCell = element("td", "", tr);
-    const species = speciesOf(row[7]);
-    scientificTaxon(species ? element("a", "", taxonCell) : taxonCell, taxaById.get(row[7]));
-    if (species) taxonCell.firstChild.href = `#species/${species[0]}`;
-    element("td", row[3] || "—", tr);
-    element("td", familyOf(row[7])?.[2] || "—", tr);
-    element("td", projectName(row[2]), tr);
-    renderSampleStages(row, element("td", "", tr));
-    itemLink(element("td", "", tr), "Field_Data", row[0], "Open ↗", `Open ${row[1]} in Directus`);
-  }
+  for (const row of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) renderSampleTableRow(body, row);
+}
+function renderSampleTableRow(body, row) {
+  const tr = element("tr", "", body);
+  const cell = element("td", "", tr);
+  const link = element("a", row[1], cell);
+  link.href = `#sample/${row[0]}`;
+  const taxonCell = element("td", "", tr);
+  const resolved = taxaById.get(row[7]);
+  const taxonLink = resolved ? element("a", "", taxonCell) : taxonCell;
+  scientificTaxon(taxonLink, resolved);
+  if (resolved) taxonLink.href = taxonHref(resolved);
+  element("td", row[3] || "—", tr);
+  element("td", familyOf(row[7])?.[2] || "—", tr);
+  element("td", projectName(row[2]), tr);
+  element("td", displayCollectionDate(row[6]), tr);
+  renderSampleStages(row, element("td", "", tr));
+  itemLink(element("td", "", tr), "Field_Data", row[0], "Open ↗", `Open ${row[1]} in Directus`);
 }
 function renderSampleStages(row, parent) {
   const badges = element("div", "", parent, "stage-badges");
@@ -626,14 +792,100 @@ function renderSpecies(taxon) {
   const title = $("species-title");
   title.replaceChildren();
   scientificTaxon(title, taxon);
-  title.append(" ");
-  catalogueLink(title, taxon, "CoL ↗");
   const specimens = speciesRows.get(taxon[0]) || [];
   $("species-summary").textContent = `${format(specimens.length)} linked field ${specimens.length === 1 ? "sample" : "samples"} · Taxa #${taxon[0]} · CoL ${taxon[1]}`;
+  renderTaxonClassification($("species-col"), taxon);
   renderSpeciesMS(taxon);
   renderSpeciesCards();
   renderSpeciesMetabolome(taxon);
+  window.SpeciesINat.render($("species-inat"), {taxon, mapping: wikidataTaxa});
   window.ChemCalc.render($("species-chemcalc"));
+}
+
+function renderUpperTaxon(taxon) {
+  taxonMapController?.destroy();
+  taxonMapController = null;
+  taxonRows = rows.filter((row) => row[7] != null && belongsToTaxon(row[7], taxon[0]));
+  const title = $("taxon-title");
+  title.replaceChildren();
+  scientificTaxon(title, taxon);
+  $("taxon-summary").textContent = `${format(taxonRows.length)} linked field ${taxonRows.length === 1 ? "sample" : "samples"} · ${taxon[4]} · Taxa #${taxon[0]} · CoL ${taxon[1]}`;
+  renderTaxonClassification($("taxon-col"), taxon);
+  const ranks = $("taxon-rank");
+  const selectedRank = ranks.value;
+  ranks.replaceChildren(element("option", "All ranks"));
+  ranks.firstChild.value = "";
+  for (const rank of [...new Set(taxonRows.map((row) => taxaById.get(row[7])[4]))].sort()) {
+    const option = element("option", rank, ranks);
+    option.value = rank;
+  }
+  ranks.value = selectedRank;
+  applyTaxonFilters();
+  setTaxonView("cards");
+}
+
+function applyTaxonFilters() {
+  if (selectedTaxonPageId == null) return;
+  const query = $("taxon-query").value.trim().toLocaleLowerCase();
+  const project = $("taxon-project").value;
+  const rank = $("taxon-rank").value;
+  const profiledOnly = $("taxon-profiled").checked;
+  visibleTaxonRows = sortedSamples(taxonRows.filter((row) =>
+    projectMatches(row[2], project) &&
+    (!rank || taxaById.get(row[7])[4] === rank) &&
+    (!profiledOnly || msProfileIndex?.byField.has(row[0])) &&
+    sampleSearchMatches(row, query)), $("taxon-sort").value);
+  taxonPage = 0;
+  renderTaxonCards();
+  if (taxonView === "map" && !$("taxon-view").hidden) {
+    taxonMapController?.destroy();
+    taxonMapController = null;
+    setTaxonView("map");
+  }
+}
+
+function renderTaxonCards() {
+  const pages = Math.max(1, Math.ceil(visibleTaxonRows.length / PAGE_SIZE));
+  taxonPage = Math.min(Math.max(0, taxonPage), pages - 1);
+  $("taxon-filter-count").textContent = `${format(visibleTaxonRows.length)} of ${format(taxonRows.length)} linked field samples`;
+  $("taxon-page-label").textContent = `Page ${taxonPage + 1} of ${pages}`;
+  $("taxon-previous").disabled = taxonPage === 0;
+  $("taxon-next").disabled = taxonPage >= pages - 1;
+  $("taxon-empty").hidden = visibleTaxonRows.length > 0 || taxonView === "map";
+  const cards = $("taxon-cards");
+  const table = $("taxon-sample-rows");
+  cards.replaceChildren();
+  table.replaceChildren();
+  for (const row of visibleTaxonRows.slice(taxonPage * PAGE_SIZE, (taxonPage + 1) * PAGE_SIZE)) {
+    renderFieldSampleCard(cards, row);
+    renderSampleTableRow(table, row);
+  }
+}
+
+function setTaxonView(view) {
+  taxonView = view;
+  $("taxon-cards-panel").hidden = view !== "cards";
+  $("taxon-list-panel").hidden = view !== "list";
+  $("taxon-pager").hidden = view === "map";
+  $("taxon-map-panel").hidden = view !== "map";
+  $("taxon-empty").hidden = visibleTaxonRows.length > 0 || view === "map";
+  $("taxon-cards-button").setAttribute("aria-pressed", String(view === "cards"));
+  $("taxon-table-button").setAttribute("aria-pressed", String(view === "list"));
+  $("taxon-map").setAttribute("aria-pressed", String(view === "map"));
+  if (view !== "map") {
+    taxonMapController?.destroy();
+    taxonMapController = null;
+    return;
+  }
+  if (taxonMapController || $("taxon-view").hidden) return;
+  taxonMapController = window.DBGICollectorMap.mount({
+    root: $("taxon-map-root"),
+    observations: visibleTaxonRows.map((row) => ({row, taxon: taxaById.get(row[7])})),
+    loadLeaflet,
+    renderScientificTaxon: scientificTaxon,
+    scopeLabel: taxaById.get(selectedTaxonPageId)[2],
+    taxonHref,
+  });
 }
 
 function renderSpeciesMS(taxon) {
@@ -660,6 +912,27 @@ function renderSpeciesMS(taxon) {
   }
 }
 
+function renderFieldSampleCard(cards, row) {
+  const card = element("article", "", cards, "species-card");
+  const heading = element("h3", "", card);
+  const sample = element("a", row[1], heading);
+  sample.href = `#sample/${row[0]}`;
+  const identifyingTaxon = taxaById.get(row[7]);
+  const identification = element("p", "Resolved as ", card, "species-identification");
+  const taxonLink = element("a", "", identification);
+  scientificTaxon(taxonLink, identifyingTaxon);
+  taxonLink.href = taxonHref(identifyingTaxon);
+  element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${row[6] ? ` · ${row[6]}` : ""}`, card, "muted");
+  if (processingIndex) {
+    const stages = processingIndex.byField.get(row[0]) || [];
+    const counts = ["dried", "extract", "aliquot", "ms"].map((kind) => stages.filter((record) => record[0] === kind).length);
+    element("p", `${counts[0]} dried · ${counts[1]} extracts · ${counts[2]} aliquots · ${counts[3]} MS records`, card, "species-stages");
+  } else {
+    element("p", processingError ? "Processing snapshot unavailable." : "Checking downstream records…", card, "muted");
+  }
+  itemLink(card, "Field_Data", row[0], `Directus Field_Data #${row[0]} ↗`, `Open field sample ${row[1]} in Directus`);
+}
+
 function renderSpeciesCards() {
   const specimens = speciesRows.get(selectedSpeciesId) || [];
   const totalPages = Math.max(1, Math.ceil(specimens.length / PAGE_SIZE));
@@ -670,22 +943,7 @@ function renderSpeciesCards() {
   const cards = $("species-cards");
   cards.replaceChildren();
   for (const row of specimens.slice(speciesPage * PAGE_SIZE, (speciesPage + 1) * PAGE_SIZE)) {
-    const card = element("article", "", cards, "species-card");
-    const heading = element("h3", "", card);
-    const sample = element("a", row[1], heading);
-    sample.href = `#sample/${row[0]}`;
-    const identifyingTaxon = taxaById.get(row[7]);
-    const identification = element("p", "Resolved as ", card, "species-identification");
-    scientificTaxon(identification, identifyingTaxon);
-    element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${row[6] ? ` · ${row[6]}` : ""}`, card, "muted");
-    if (processingIndex) {
-      const stages = processingIndex.byField.get(row[0]) || [];
-      const counts = ["dried", "extract", "aliquot", "ms"].map((kind) => stages.filter((record) => record[0] === kind).length);
-      element("p", `${counts[0]} dried · ${counts[1]} extracts · ${counts[2]} aliquots · ${counts[3]} MS records`, card, "species-stages");
-    } else {
-      element("p", processingError ? "Processing snapshot unavailable." : "Checking downstream records…", card, "muted");
-    }
-    itemLink(card, "Field_Data", row[0], `Directus Field_Data #${row[0]} ↗`, `Open field sample ${row[1]} in Directus`);
+    renderFieldSampleCard(cards, row);
   }
 }
 
@@ -882,7 +1140,6 @@ function detail(row) {
   }
   renderMSDetail(row);
   renderGNPSDetail(row);
-  window.ChemCalc.render($("sample-chemcalc"));
   renderProcessingDetail(row);
   const fields = $("detail-fields");
   fields.replaceChildren();
@@ -909,13 +1166,14 @@ function detail(row) {
       itemLink(cell, "Field_Data", row[0], row[3], `Open recorded field name for ${row[1]} in Directus`);
     } else if (label === "Resolved CoL name" && taxon) {
       cell.replaceChildren();
-      const species = speciesOf(row[7]);
-      const target = species ? element("a", "", cell) : catalogueLink(cell, taxon, "");
-      scientificTaxon(target || cell, taxon);
-      if (species) target.href = `#species/${species[0]}`;
+      const target = element("a", "", cell);
+      scientificTaxon(target, taxon);
+      target.href = taxonHref(taxon);
     } else if (label === "CoL family" && family) {
       cell.replaceChildren();
       sampleFilterLink(cell, family[2], {family: family[2]});
+      const browse = element("a", "Family page →", cell, "taxon-browse-link");
+      browse.href = `#taxon/${family[0]}`;
       cell.append(" ");
       catalogueLink(cell, family, "CoL ↗");
     } else if (label === "CoL usage ID" && taxon) {
@@ -942,6 +1200,8 @@ function detail(row) {
     const publicLink = catalogueLink(item, ancestor, "");
     scientificTaxon(publicLink || item, ancestor);
     if (publicLink) publicLink.append(" ↗");
+    const browse = element("a", "Related samples →", item, "taxon-browse-link");
+    browse.href = taxonHref(ancestor);
   }
   const located = Number.isFinite(row[4]) && Number.isFinite(row[5]);
   $("location").hidden = !located;
@@ -1023,6 +1283,7 @@ async function loadWikidataTaxa() {
     if (!$("species-view").hidden && location.hash.startsWith("#species/")) {
       const taxon = taxaById.get(Number(location.hash.slice(9)));
       if (taxon?.[4] === "species") renderSpeciesMetabolome(taxon);
+      if (taxon?.[4] === "species") window.SpeciesINat.render($("species-inat"), {taxon, mapping: wikidataTaxa});
     }
   } catch (error) {
     console.warn("Wikidata species links unavailable:", error);
@@ -1041,13 +1302,21 @@ function renderMSDetail(row) {
 
 function renderGNPSDetail(row) {
   const profiles = msProfileIndex?.byField.get(row[0]) || [];
-  window.GNPSDashboard.render($("sample-gnps"), {profiles});
+  const gnps = $("sample-gnps");
+  window.GNPSDashboard.render(gnps, {profiles});
+  const calculator = $("sample-chemcalc");
+  calculator.replaceChildren();
+  calculator.hidden = true;
+  if (!gnps.hidden) window.ChemCalc.render(calculator);
 }
 function renderProcessingDetail(row) {
   const root = $("sample-processing");
   if (processingIndex) {
-    window.DBGIProcessing.render(root, {row, index: processingIndex, directusBase});
+    root.hidden = !processingIndex.byField.get(row[0])?.length;
+    if (root.hidden) root.replaceChildren();
+    else window.DBGIProcessing.render(root, {row, index: processingIndex, directusBase});
   } else {
+    root.hidden = false;
     root.replaceChildren();
     element("h3", "Specimen processing", root);
     element("p", processingError ? "Directus processing snapshot unavailable." : "Checking linked dried samples, extracts and aliquots…", root, "muted");
@@ -1068,6 +1337,7 @@ async function loadProcessing() {
     if (row) renderProcessingDetail(row);
   }
   if (!$("species-view").hidden && location.hash.startsWith("#species/")) renderSpeciesCards();
+  if (!$("taxon-view").hidden && location.hash.startsWith("#taxon/")) renderTaxonCards();
   if (!$("samples-view").hidden) renderPage();
 }
 
@@ -1100,6 +1370,9 @@ async function loadMSProfiles() {
   }
   if (!msProfileIndex) $("profiled-only").checked = false;
   $("profiled-only").disabled = !msProfileIndex;
+  if (!msProfileIndex) $("taxon-profiled").checked = false;
+  $("taxon-profiled").disabled = !msProfileIndex;
+  if (!$("taxon-view").hidden) applyTaxonFilters();
   $("profiled-filter-status").hidden = !!msProfileIndex && !$("profiled-only").checked;
   $("profiled-filter-status").textContent = msProfileError ?
     "MS file snapshot unavailable; the profiled-only filter cannot be used." :
@@ -1195,6 +1468,8 @@ async function load() {
     for (const group of projects) {
       const option = element("option", projectName(group.name), $("project"));
       option.value = group.key;
+      const taxonOption = element("option", projectName(group.name), $("taxon-project"));
+      taxonOption.value = group.key;
       const treemapOption = element("option", projectName(group.name), $("treemap-project"));
       treemapOption.value = group.key;
     }
@@ -1203,6 +1478,12 @@ async function load() {
       aliases.label = "Individual Directus projects";
       for (const garden of gardenCatalog.gardens) for (const alias of garden.aliases) {
         const option = element("option", `${garden.name} · ${alias}`, aliases);
+        option.value = `p:${alias}`;
+      }
+      const taxonAliases = element("optgroup", "", $("taxon-project"));
+      taxonAliases.label = "Individual Directus projects";
+      for (const garden of gardenCatalog.gardens) for (const alias of garden.aliases) {
+        const option = element("option", `${garden.name} · ${alias}`, taxonAliases);
         option.value = `p:${alias}`;
       }
     }
@@ -1223,6 +1504,7 @@ async function loadGardenProgress() {
     const response = await fetch("data/garden_progress.json");
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     window.GardenProgress.render(root, await response.json());
+    addTableControls(root.querySelector("table"), "garden progress rows");
   } catch (error) {
     root.replaceChildren();
     element("p", `Garden progress unavailable: ${error.message}`, root, "muted");
@@ -1232,13 +1514,14 @@ async function loadGardenProgress() {
 $("query").addEventListener("input", () => { selectedTaxonId = null; selectedTreemapTaxa = null; filter(); });
 $("project").addEventListener("change", () => { selectedTreemapTaxa = null; filter(); });
 $("family-query").addEventListener("input", () => { selectedTreemapTaxa = null; filter(); });
+$("sample-sort").addEventListener("change", filter);
 $("profiled-only").addEventListener("change", () => {
   $("profiled-filter-status").hidden = !$("profiled-only").checked;
   filter();
 });
 $("clear").addEventListener("click", () => {
   selectedTaxonId = null; selectedTreemapTaxa = null;
-  $("query").value = ""; $("project").value = ""; $("family-query").value = "";
+  $("query").value = ""; $("project").value = ""; $("family-query").value = ""; $("sample-sort").value = "source";
   $("profiled-only").checked = false;
   $("profiled-filter-status").hidden = !!msProfileIndex;
   filter();
@@ -1246,6 +1529,12 @@ $("clear").addEventListener("click", () => {
 $("treemap-project").addEventListener("change", buildTreemap);
 $("family-previous").addEventListener("click", () => { familyPage--; renderFamilies(); });
 $("family-next").addEventListener("click", () => { familyPage++; renderFamilies(); });
+for (const id of ["family-table-query", "family-table-sort"]) {
+  $(id).addEventListener(id === "family-table-query" ? "input" : "change", () => {
+    familyPage = 0;
+    renderFamilies();
+  });
+}
 new ResizeObserver(() => renderTreemap()).observe($("treemap-canvas"));
 $("previous").addEventListener("click", () => { page--; renderPage(); });
 $("view-list").addEventListener("click", () => setSampleView("list"));
@@ -1260,6 +1549,22 @@ $("species-next").addEventListener("click", () => {
   speciesPage++;
   renderSpeciesCards();
   $("species-cards").scrollIntoView({block: "start"});
+});
+$("taxon-cards-button").addEventListener("click", () => setTaxonView("cards"));
+$("taxon-table-button").addEventListener("click", () => setTaxonView("list"));
+$("taxon-map").addEventListener("click", () => setTaxonView("map"));
+for (const id of ["taxon-query", "taxon-project", "taxon-rank", "taxon-sort", "taxon-profiled"]) {
+  $(id).addEventListener(id === "taxon-query" ? "input" : "change", applyTaxonFilters);
+}
+$("taxon-previous").addEventListener("click", () => {
+  taxonPage--;
+  renderTaxonCards();
+  $("taxon-cards").scrollIntoView({block: "start"});
+});
+$("taxon-next").addEventListener("click", () => {
+  taxonPage++;
+  renderTaxonCards();
+  $("taxon-cards").scrollIntoView({block: "start"});
 });
 $("hero-search").addEventListener("submit", (event) => {
   event.preventDefault();

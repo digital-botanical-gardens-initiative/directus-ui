@@ -160,7 +160,7 @@ window.INaturalist = (() => {
     info.className = "inat-summary";
     node("p", "Directus Curation_Data provides observation IDs, sample joins, observer identifications, community taxon IDs, and all ordered photo URLs. iNaturalist API is an external lookup for community scientific name/rank and matched photo credit/license only; CoL name/rank and ID come from Directus Taxa. Names are compared only at the same comparable rank. Different names are review candidates, not proof of an error: taxonomies and synonyms may differ. Null community IDs and unmatched ranks are unassessable. Selection is local; nothing is uploaded or updated.", root);
     const controls = node("div", null, root, "inat-controls");
-    const searchLabel = node("label", "Search sample, observation, or taxon ", controls);
+    const searchLabel = node("label", "Search observation metadata ", controls);
     const search = node("input", null, searchLabel);
     search.type = "search";
     const statusLabel = node("label", "Status ", controls);
@@ -170,6 +170,20 @@ window.INaturalist = (() => {
       option.value = value;
     }
     filter.value = "potential disagreement";
+    const orderLabel = node("label", "Order observations ", controls);
+    const order = node("select", null, orderLabel);
+    for (const [value, text] of [
+      ["default", "Snapshot order"],
+      ["0:asc", "Sample ID (A–Z)"], ["0:desc", "Sample ID (Z–A)"],
+      ["2:asc", "Observation ID (low–high)"], ["2:desc", "Observation ID (high–low)"],
+      ["7:asc", "Community name (A–Z)"], ["7:desc", "Community name (Z–A)"],
+      ["10:asc", "CoL name (A–Z)"], ["10:desc", "CoL name (Z–A)"],
+      ["12:asc", "Review status (A–Z)"], ["12:desc", "Review status (Z–A)"],
+    ]) {
+      const option = node("option", text, order);
+      option.value = value;
+    }
+    order.value = "default";
     const selectedCount = node("p", "0 selected for review (local only).", root);
     selectedCount.setAttribute("aria-live", "polite");
     const resultCount = node("p", null, root);
@@ -184,11 +198,23 @@ window.INaturalist = (() => {
     const overflow = node("p", null, root, "inat-overflow");
     const selected = new Set();
     const updateSelected = () => { selectedCount.textContent = `${selected.size} selected for review (local only).`; };
+    const nameOrder = new Intl.Collator(undefined, {sensitivity: "base", numeric: true});
     const repaint = () => {
       body.replaceChildren();
       const query = search.value.trim().toLocaleLowerCase();
       const matches = rows.filter((row) => (filter.value === "all" || row[12] === filter.value) &&
-        [row[0], row[2], row[4], row[7], row[10], row[9]].some((value) => String(value ?? "").toLocaleLowerCase().includes(query)));
+        row.some((value, index) => index < 14 && String(value ?? "").toLocaleLowerCase().includes(query)));
+      if (order.value !== "default") {
+        const [column, direction] = order.value.split(":");
+        const index = Number(column);
+        matches.sort((a, b) => {
+          const left = a[index];
+          const right = b[index];
+          if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;
+          const comparison = index === 2 ? Number(left) - Number(right) : nameOrder.compare(String(left), String(right));
+          return direction === "desc" ? -comparison : comparison;
+        });
+      }
       resultCount.textContent = `${matches.length} of ${rows.length} observations shown.`;
       // Keep DOM responsive when a filter displays thousands of observations.
       const shown = matches.slice(0, 200);
@@ -224,6 +250,7 @@ window.INaturalist = (() => {
     };
     search.addEventListener("input", repaint);
     filter.addEventListener("change", repaint);
+    order.addEventListener("change", repaint);
     repaint();
   }
 
