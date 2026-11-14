@@ -210,7 +210,6 @@
             const heading = node("span", "collectors__card-heading");
             heading.append(portrait(collector), node("strong", "collectors__name", collector.name));
             card.append(heading,
-              node("span", "collectors__identity", `People ID ${collector.id}`),
               node("span", "collectors__count", `${countFormat.format(collector.field_ids.length)} linked ${collector.field_ids.length === 1 ? "sample" : "samples"}`));
             const track = node("span", "collectors__track");
             track.setAttribute("aria-hidden", "true");
@@ -265,7 +264,7 @@
       const header = node("div", "collectors__person-header");
       const identity = node("div", "collectors__person-identity");
       identity.append(node("h2", null, collector.name),
-        node("p", "collectors__identity", `People ID ${collector.id} · ${countFormat.format(collector.field_ids.length)} linked ${collector.field_ids.length === 1 ? "sample" : "samples"}`));
+        node("p", "collectors__identity", `${countFormat.format(collector.field_ids.length)} linked ${collector.field_ids.length === 1 ? "sample" : "samples"}`));
       header.append(portrait(collector), identity);
       section.append(back, header);
       const person = node("a", "collectors__source", "People record in Directus ↗ (curator login may be required)");
@@ -276,22 +275,21 @@
       const profiles = profileLinks(collector);
       if (profiles) section.append(profiles);
       if (collector.portrait) section.append(portraitCredit());
-      const controls = node("div", "collectors__tabs");
+      const controls = node("div", "view-switch collectors__tabs");
       controls.setAttribute("role", "group");
-      controls.setAttribute("aria-label", "Collector exploration");
+      controls.setAttribute("aria-label", "Collector field-sample display and species summary");
       const views = new Map();
-      for (const [key, label] of [["species", "Species list"], ["map", "Species map"], ["samples", "Field samples"]]) {
+      for (const [key, label] of [["cards", "Cards"], ["list", "List"], ["map", "Map"], ["species", "Species summary"]]) {
         const button = node("button", `collectors__tab collectors__tab--${key}`, label);
         button.type = "button";
         button.addEventListener("click", () => selectView(key));
         controls.append(button);
         views.set(key, button);
       }
-      section.append(controls);
       const speciesPanel = node("section", "collectors__species-panel");
       speciesPanel.setAttribute("aria-label", "Resolved species recorded by this collector");
       speciesPanel.append(node("p", "collectors__note",
-        `${countFormat.format(species.length)} distinct Taxa species across ${countFormat.format(observations.length)} linked field samples. ${countFormat.format(collector.field_ids.length - observations.length)} samples lack a resolved species in Taxa and are excluded from the species views, but remain in Field samples. Identifications below species rank follow their Taxa parent lineage.`));
+        `${countFormat.format(species.length)} distinct Taxa species across ${countFormat.format(observations.length)} linked field samples. ${countFormat.format(collector.field_ids.length - observations.length)} samples lack a resolved species in Taxa and are omitted from this species summary. Cards, List and Map include all linked samples. Identifications below species rank follow their Taxa parent lineage.`));
       const speciesOptions = [
         ["count-desc", "Samples (most first)", entry => entry.field_ids.length, true],
         ["count-asc", "Samples (fewest first)", entry => entry.field_ids.length, false],
@@ -306,25 +304,24 @@
       });
       speciesPanel.append(speciesControls.group);
       const speciesList = node("ol", "collectors__species-list");
-      const speciesPager = node("nav", "collectors__pager");
+      const speciesPager = node("nav", "pager collectors__pager");
       speciesPager.setAttribute("aria-label", "Collector species pages");
-      const previousSpecies = node("button", null, "← Previous species");
+      const previousSpecies = node("button", "secondary", "← Previous");
       previousSpecies.type = "button";
       const speciesPosition = node("span", null);
       speciesPosition.setAttribute("aria-live", "polite");
-      const nextSpecies = node("button", null, "Next species →");
+      const nextSpecies = node("button", "secondary", "Next →");
       nextSpecies.type = "button";
       speciesPager.append(previousSpecies, speciesPosition, nextSpecies);
       speciesPanel.append(speciesList, speciesPager);
       const mapPanel = node("section", "collectors__map-panel");
-      mapPanel.setAttribute("aria-label", "Collector species observation map");
+      mapPanel.setAttribute("aria-label", "Collector field sample map");
       mapPanel.append(node("p", "collectors__note",
-        "The map shows resolved species samples with valid recorded GeoJSON points; records without coordinates remain in the lists. Selecting Map loads Leaflet from unpkg and OpenStreetMap tiles."));
+        "All matching field samples with recorded GeoJSON coordinates appear on the map, including those without a resolved species. Records without coordinates remain in Cards and List. Selecting Map loads Leaflet from unpkg and OpenStreetMap tiles."));
       const mapRoot = node("div", "collectors__map-root");
       mapPanel.append(mapRoot);
       const samplesPanel = node("section", "collectors__samples-panel");
-      samplesPanel.setAttribute("aria-label", "Field samples linked to this collector");
-      const sampleScope = node("div", "collectors__sample-scope");
+      samplesPanel.setAttribute("aria-label", "Field-sample cards linked to this collector");
       const sampleOptions = [
         ["id-asc", "Sample ID (low to high)", id => id, false],
         ["id-desc", "Sample ID (high to low)", id => id, true],
@@ -337,23 +334,42 @@
         ["date-asc", "Date (earliest first)", id => byId.get(id)[6] || "", false],
         ["date-desc", "Date (latest first)", id => byId.get(id)[6] || "", true],
       ];
-      const sampleControls = listControls("collector field samples", sampleOptions, () => {
-        samplePage = 0;
-        renderSamplePage();
-      });
-      samplesPanel.append(sampleControls.group);
+      const sampleControls = listControls("collector field samples", sampleOptions, refreshSampleResults);
+      const subjectLabel = node("label", "collectors__filter", "Observation subject ");
+      const subjectFilter = node("select");
+      window.DBGIObservationSubject.populate(subjectFilter, collector.field_ids.map((id) => byId.get(id)));
+      subjectFilter.addEventListener("change", refreshSampleResults);
+      subjectLabel.append(subjectFilter);
+      sampleControls.group.append(subjectLabel);
       const sampleList = node("ul", "collectors__samples");
-      const samplePager = node("nav", "collectors__pager");
+      samplesPanel.append(sampleList);
+      const listPanel = node("section", "collectors__list-panel");
+      listPanel.setAttribute("aria-label", "Field-sample list linked to this collector");
+      const tableScroll = node("div", "table-scroll");
+      const table = node("table");
+      const tableHead = node("thead");
+      const headingRow = node("tr");
+      for (const title of ["Sample ID", "Observation subject", "Resolved CoL species", "Field name", "Project", "Collection date", "Directus"]) {
+        const cell = node("th", null, title);
+        cell.setAttribute("scope", "col");
+        headingRow.append(cell);
+      }
+      tableHead.append(headingRow);
+      const sampleRows = node("tbody");
+      table.append(tableHead, sampleRows);
+      tableScroll.append(table);
+      listPanel.append(tableScroll);
+      const sampleScope = node("div", "collectors__sample-scope");
+      const samplePager = node("nav", "pager collectors__pager");
       samplePager.setAttribute("aria-label", "Collector samples pages");
-      const previousSample = node("button", null, "← Previous samples");
+      const previousSample = node("button", "secondary", "← Previous");
       previousSample.type = "button";
       const samplePosition = node("span", null);
       samplePosition.setAttribute("aria-live", "polite");
-      const nextSample = node("button", null, "Next samples →");
+      const nextSample = node("button", "secondary", "Next →");
       nextSample.type = "button";
       samplePager.append(previousSample, samplePosition, nextSample);
-      samplesPanel.append(sampleScope, sampleList, samplePager);
-      section.append(speciesPanel, mapPanel, samplesPanel);
+      section.append(sampleControls.group, controls, sampleScope, samplesPanel, listPanel, mapPanel, samplePager, speciesPanel);
 
       function matchingSpecies() {
         return filteredSorted(species, speciesControls, entry =>
@@ -362,11 +378,21 @@
       }
 
       function matchingSamples() {
-        const ids = selectedSpecies ? selectedSpecies.field_ids : collector.field_ids;
+        const ids = (selectedSpecies ? selectedSpecies.field_ids : collector.field_ids)
+          .filter((fieldId) => window.DBGIObservationSubject.matches(byId.get(fieldId)[9], subjectFilter.value));
         return filteredSorted(ids, sampleControls, fieldId => {
           const row = byId.get(fieldId);
-          return `${fieldId} ${row[1]} ${row[3] || ""} ${row[2] || ""} ${row[6] || ""}`;
+          return `${fieldId} ${row[1]} ${row[3] || ""} ${row[2] || ""} ${row[6] || ""} ${resolveSpecies(row[7])?.[2] || ""}`;
         }, sampleOptions, (a, b) => a - b);
+      }
+
+      function refreshSampleResults() {
+        samplePage = 0;
+        renderSamplePage();
+        if (activeMap) {
+          hide();
+          selectView("map");
+        }
       }
 
       function renderSpeciesPage() {
@@ -393,7 +419,7 @@
           samples.addEventListener("click", () => {
             selectedSpecies = entry;
             samplePage = 0;
-            selectView("samples");
+            selectView("cards");
           });
           item.append(samples);
           items.push(item);
@@ -420,28 +446,66 @@
           clear.type = "button";
           clear.addEventListener("click", () => {
             selectedSpecies = null;
-            samplePage = 0;
-            renderSamplePage();
+            refreshSampleResults();
           });
           sampleScope.append(clear);
         } else sampleScope.append(node("p", "collectors__note", "All field samples linked to this Directus collector, including unresolved identifications."));
         const cards = [];
+        const tableRows = [];
         for (const fieldId of ids.slice(samplePage * PAGE_SIZE, (samplePage + 1) * PAGE_SIZE)) {
           const row = byId.get(fieldId);
-          const card = node("li", "collectors__sample");
+          const taxon = resolveSpecies(row[7]);
+          const sourceUrl = `${directusBase}/admin/content/Field_Data/${fieldId}`;
+          const card = node("li", "collectors__sample species-card");
+          const heading = node("h3");
+          window.DBGIObservationSubject.inline(heading, row[9]);
           const dashboard = node("a", "collectors__sample-link", row[1]);
           dashboard.href = `#sample/${fieldId}`;
-          card.append(dashboard, node("span", "collectors__sample-id", `Field_Data ID ${fieldId}`),
-            node("span", "collectors__sample-meta", `Recorded field name: ${row[3] || "Not recorded"} · Garden / project: ${row[2] || "Not recorded"} · Date: ${row[6] || "Not recorded"}`));
+          heading.append(dashboard);
+          card.append(heading);
+          const identification = node("p", "species-identification");
+          if (taxon) {
+            identification.append("Resolved as ");
+            const link = node("a");
+            link.href = `#species/${taxon[0]}`;
+            renderScientificTaxon(link, taxon);
+            identification.append(link);
+          } else identification.textContent = "Not resolved to a species in Directus Taxa";
+          card.append(identification, node("p", "collectors__sample-meta",
+            `Field name: ${row[3] || "Not recorded"} · Project: ${row[2] || "Not recorded"} · Date: ${row[6] || "Not recorded"}`));
           const source = node("a", "collectors__sample-source", "Field_Data in Directus ↗");
-          source.href = `${directusBase}/admin/content/Field_Data/${fieldId}`;
+          source.href = sourceUrl;
           source.target = "_blank";
           source.rel = "noopener noreferrer";
           card.append(source);
           cards.push(card);
+
+          const record = node("tr");
+          const sampleCell = node("td");
+          const sampleLink = node("a", null, row[1]);
+          sampleLink.href = `#sample/${fieldId}`;
+          sampleCell.append(sampleLink);
+          const speciesCell = node("td");
+          if (taxon) {
+            const link = node("a");
+            link.href = `#species/${taxon[0]}`;
+            renderScientificTaxon(link, taxon);
+            speciesCell.append(link);
+          } else speciesCell.textContent = "—";
+          const directusCell = node("td");
+          const directusLink = node("a", null, "Open ↗");
+          directusLink.href = sourceUrl;
+          directusLink.target = "_blank";
+          directusLink.rel = "noopener noreferrer";
+          directusCell.append(directusLink);
+          record.append(sampleCell, window.DBGIObservationSubject.cell(row[9]), speciesCell,
+            node("td", null, row[3] || "—"), node("td", null, row[2] || "—"),
+            node("td", null, row[6] || "—"), directusCell);
+          tableRows.push(record);
         }
         if (!cards.length) cards.push(node("li", "collectors__message", "No matching field samples."));
         sampleList.replaceChildren(...cards);
+        sampleRows.replaceChildren(...tableRows);
         samplePosition.textContent = `Page ${samplePage + 1} of ${count} · ${countFormat.format(ids.length)} samples`;
         previousSample.disabled = samplePage === 0;
         nextSample.disabled = samplePage === count - 1;
@@ -451,12 +515,19 @@
         if (view !== "map") hide();
         speciesPanel.hidden = view !== "species";
         mapPanel.hidden = view !== "map";
-        samplesPanel.hidden = view !== "samples";
+        samplesPanel.hidden = view !== "cards";
+        listPanel.hidden = view !== "list";
+        sampleControls.group.hidden = view === "species";
+        sampleScope.hidden = view === "species";
+        samplePager.hidden = view === "species" || view === "map";
         for (const [key, button] of views) button.setAttribute("aria-pressed", String(key === view));
+        if (view === "cards" || view === "list") renderSamplePage();
         if (view === "map" && !activeMap) activeMap = window.DBGICollectorMap.mount({
-          root: mapRoot, observations, loadLeaflet, renderScientificTaxon,
+          root: mapRoot, observations: visibleSamples.map(fieldId => {
+            const row = byId.get(fieldId);
+            return {row, taxon: resolveSpecies(row[7])};
+          }), loadLeaflet, renderScientificTaxon, scopeLabel: "field",
         });
-        if (view === "samples") renderSamplePage();
       }
       previousSpecies.addEventListener("click", () => { if (speciesPage > 0) { speciesPage--; renderSpeciesPage(); } });
       nextSpecies.addEventListener("click", () => {
@@ -469,7 +540,7 @@
       });
       renderSpeciesPage();
       detailRoot.replaceChildren(section);
-      selectView("species");
+      selectView("cards");
       return true;
     }
 

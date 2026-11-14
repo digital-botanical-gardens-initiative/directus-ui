@@ -23,11 +23,13 @@ def samples():
 
 
 def observation(obs_id=110560140, sample_id="dbgi_000037", community=206749, observer=206749, name="Echeveria elegans",
-                photo="https://inaturalist-open-data.s3.amazonaws.com/photos/186526029/square.jpeg"):
+                photo="https://inaturalist-open-data.s3.amazonaws.com/photos/186526029/square.jpeg",
+                comments_count=0):
     return {"id": obs_id, "emi_external_id": sample_id, "community_taxon_id": community,
             "taxon_id": observer, "taxon_name": name, "taxon_rank": "species", "photo_url": photo,
             "photos": repr([{"186526029": photo}]) if photo is not None else None,
-            "uri": f"https://www.inaturalist.org/observations/{obs_id}", "private_curator_notes": "NEVER EXPORT"}
+            "uri": f"https://www.inaturalist.org/observations/{obs_id}", "comments_count": comments_count,
+            "comments": "[{'body': 'PRIVATE CURATOR NOTE'}]", "private_curator_notes": "NEVER EXPORT"}
 
 
 class InaturalistTests(unittest.TestCase):
@@ -55,6 +57,37 @@ class InaturalistTests(unittest.TestCase):
         self.assertEqual(by_id[110561024][10], None)
         self.assertNotIn("private_curator_notes", json.dumps(rows))
         self.assertNotIn("ofvs_15466", json.dumps(rows))
+        self.assertNotIn("PRIVATE CURATOR NOTE", json.dumps(rows))
+
+    def test_comment_counts_are_public_verified_and_unknown_is_not_zero(self):
+        source = [observation(110560140, comments_count=2),
+                  observation(110560141, comments_count=0),
+                  observation(110560142, comments_count=None),
+                  observation(110560143, comments_count="3"),
+                  observation(110560144, comments_count=-4),
+                  observation(110560145, comments_count=0),
+                  observation(110560146, comments_count=1)]
+        metadata = {110560140: {"comments_count": 3, "comments": [{"body": "do not publish"}]},
+                    110560141: {"comments_count": "5"},
+                    110560142: {"comments_count": 0},
+                    110560143: {"comments_count": True},
+                    110560144: {"comments_count": -1},
+                    110560145: {"comments_count": 2},
+                    110560146: {"comments_count": 0}}
+        rows, joined = inat.prepare(source, samples(), {}, metadata)
+        self.assertEqual((len(rows), joined), (7, 1))
+        by_id = {row[2]: row for row in rows}
+        self.assertEqual([by_id[ident][15:17] for ident in range(110560140, 110560147)],
+                         [[3, "iNaturalist API"], [0, "Directus Curation_Data"],
+                          [0, "iNaturalist API"], [None, None], [None, None],
+                          [2, "iNaturalist API"], [1, "Directus Curation_Data"]])
+        self.assertNotIn("do not publish", json.dumps(rows))
+        self.assertNotIn("PRIVATE CURATOR NOTE", json.dumps(rows))
+        self.assertEqual(inat.public_comments(1, {"comments_count": 0}), (1, "Directus Curation_Data"))
+        self.assertEqual(inat.public_comments(0, {"comments_count": 0}), (0, "iNaturalist API"))
+        self.assertEqual(inat.public_comments(None, None), (None, None))
+        for malformed in ["2", True, -1, 2.0, [], 9007199254740992]:
+            self.assertEqual(inat.public_comments(malformed, None), (None, None))
 
     def test_unresolved_and_nonaccepted_taxa_cannot_be_called_disagreements(self):
         col = samples()["taxa"][0]
@@ -128,6 +161,16 @@ class InaturalistTests(unittest.TestCase):
         self.assertEqual(records[10]["name"], "Echeveria elegans")
         self.assertEqual(len(records), 1)
 
+    def test_failed_api_batch_does_not_mask_later_public_comment_counts(self):
+        def lookup(path):
+            if path.startswith("/observations/26,"):
+                raise HTTPError(path, 429, "normal_throttling", {}, None)
+            return [{"id": int(path.rsplit("/", 1)[1].split(",")[0]), "comments_count": 1}]
+
+        with patch.object(inat, "get_api", side_effect=lookup):
+            records = inat.fetch_api_records("observations", range(1, 52))
+        self.assertEqual(set(records), {1, 51})
+
     def test_atomic_export_retains_directus_rows_when_lookups_disappear(self):
         source = [observation(), observation(110561024, sample_id="dbgi_000038", community=None, photo=None)]
         with tempfile.TemporaryDirectory() as directory:
@@ -143,11 +186,14 @@ class InaturalistTests(unittest.TestCase):
                 self.assertEqual(destination.read_text(), "prior snapshot")
             with patch.object(inat, "SAMPLES", sample_path), patch.object(inat, "OUT", destination), \
                  patch.object(inat, "fetch_public", return_value=source), \
-                 patch.object(inat, "fetch_api_records", side_effect=[{}, {}]):
+                 patch.object(inat, "fetch_api_records", side_effect=[{}, {}]) as lookup:
                 inat.build()
+                self.assertEqual(lookup.call_args_list[1].args,
+                                 ("observations", [110560140, 110561024]))
             exported = json.loads(destination.read_text(encoding="utf-8"))
             self.assertEqual(exported["rows"][0][12], "unassessable")
             self.assertEqual(exported["rows"][0][14], [[source[0]["photo_url"], None, None]])
+            self.assertEqual(exported["rows"][0][15:17], [0, "Directus Curation_Data"])
             meta = {110560140: {"photos": [{"id": 186526029, "attribution": "CC0 credit", "license_code": "cc0"}]}}
             with patch.object(inat, "SAMPLES", sample_path), patch.object(inat, "OUT", destination), \
                  patch.object(inat, "fetch_public", return_value=source), \
@@ -157,6 +203,7 @@ class InaturalistTests(unittest.TestCase):
             self.assertEqual((exported["source_count"], exported["linked_samples"], len(exported["rows"])), (2, 2, 2))
             self.assertEqual(exported["columns"], inat.COLUMNS)
             self.assertEqual(exported["rows"][0][14][0][1:], ["CC0 credit", "cc0"])
+            self.assertEqual(exported["rows"][0][15:17], [0, "Directus Curation_Data"])
             self.assertEqual(exported["rows"][1][12], "unassessable")
             self.assertEqual(exported["provenance"]["join"], "Curation_Data.emi_external_id = Field_Data.sample_id")
             self.assertNotIn("prior snapshot", destination.read_text())

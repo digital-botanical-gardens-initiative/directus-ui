@@ -5,57 +5,66 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Explore DBGI samples collected in Directus, by project and taxon.">
   <title>DBGI · Sample explorer</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="refresh_status.css?v=1">
   <link rel="stylesheet" href="hero.css?v=2">
   <link rel="stylesheet" href="garden_progress.css">
   <link rel="stylesheet" href="garden_badges.css">
   <link rel="stylesheet" href="sample_weather.css">
-  <link rel="stylesheet" href="inaturalist.css?v=2">
-  <link rel="stylesheet" href="metabolome.css?v=2">
+  <link rel="stylesheet" href="sample_subject.css?v=3">
+  <link rel="stylesheet" href="inaturalist.css?v=4">
+  <link rel="stylesheet" href="metabolome.css?v=3">
   <link rel="stylesheet" href="chemcalc.css">
   <link rel="stylesheet" href="ms_profile.css">
-  <link rel="stylesheet" href="gnps_dashboard.css?v=2">
-  <link rel="stylesheet" href="species.css?v=5">
-  <link rel="stylesheet" href="collectors.css?v=4">
+  <link rel="stylesheet" href="gnps_dashboard.css?v=3">
+  <link rel="stylesheet" href="ms_compare.css?v=1">
+  <link rel="stylesheet" href="species.css?v=6">
+  <link rel="stylesheet" href="collectors.css?v=5">
   <link rel="stylesheet" href="processing.css">
   <script src="garden_progress.js" defer></script>
   <script src="garden_badges.js" defer></script>
   <script src="sample_weather.js" defer></script>
+  <script src="sample_subject.js?v=3" defer></script>
+  <script src="refresh_status.js?v=2" defer></script>
   <script src="scientific_names.js" defer></script>
   <script src="species_inat.js?v=2" defer></script>
-  <script src="inaturalist.js?v=2" defer></script>
-  <script src="metabolome.js?v=2" defer></script>
+  <script src="inaturalist.js?v=4" defer></script>
+  <script src="metabolome.js?v=3" defer></script>
   <script src="chemcalc.js" defer></script>
   <script src="ms_profile.js" defer></script>
-  <script src="gnps_dashboard.js?v=2" defer></script>
+  <script src="gnps_dashboard.js?v=4" defer></script>
+  <script src="ms_compare.js?v=2" defer></script>
   <script src="processing.js" defer></script>
-  <script src="collector_map.js?v=2" defer></script>
-  <script src="collectors.js?v=3" defer></script>
-  <script src="app.js?v=8" defer></script>
+  <script src="collector_map.js?v=4" defer></script>
+  <script src="collectors.js?v=7" defer></script>
+  <script src="app.js?v=15" defer></script>
 </head>
 <body>
-  <header class="top"><div class="wrap header-inner"><a class="brand" href="#home"><img src="assets/dbgi-portal-logo.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a><nav aria-label="Main navigation"><a href="#home">Overview</a><a href="#samples">Samples</a><a href="#explore">Explore</a><a href="#collectors">Collectors</a><a href="#treemap">Treemap</a><a href="#inaturalist">iNaturalist review</a></nav><a href="https://www.dbgi.org/" target="_blank" rel="noopener noreferrer">About DBGI ↗</a></div></header>
+  <header class="top"><div class="wrap header-inner"><a class="brand" href="#home"><img src="assets/dbgi-portal-logo.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a><nav aria-label="Main navigation"><a href="#home">Overview</a><a href="#samples">Samples</a><a href="#explore">Explore</a><a href="#collectors">Collectors</a><a href="#compare-ms">Compare MS</a><a href="#treemap">Treemap</a><a href="#inaturalist">iNaturalist review</a></nav></div></header>
   <main>
     <section class="hero"><div class="hero-scenes" aria-hidden="true"><span class="hero-scene hero-scene--metasequoia"></span></div><div class="wrap hero-inner"><p class="eyebrow">Digital Botanical Gardens Initiative</p><h1>Explore the living collection.</h1><p>Find a botanical sample, browse projects, and follow its recorded identity and location. A read-only view of Directus field data.</p><form id="hero-search" class="hero-search"><label class="sr-only" for="hero-query">Search samples</label><input id="hero-query" placeholder="Sample ID or taxon, e.g. Lonicera" autocomplete="off"><button type="submit">Search samples →</button></form></div></section>
     <div class="wrap body-wrap"><p id="status" role="status" aria-live="polite">Loading samples…</p>
+      <aside id="refresh-status" class="refresh-status" aria-label="Directus data freshness and refresh schedule" hidden></aside>
       <section id="home-view" class="view" hidden><div class="section-heading"><div><p class="eyebrow">At a glance</p><h2>From field to collection</h2></div><p class="muted" id="updated"></p></div><div class="metrics" id="metrics"></div><div class="section-heading"><div><p class="eyebrow">Living collections</p><h2>Five botanical gardens</h2></div><a href="#explore">Compare garden records and families →</a></div><div id="featured"></div><div class="note">Taxonomic counts use the linked Catalogue of Life Taxa table; unlinked field records remain unresolved. Garden-stage indicators come from Directus processing records, and observation photos from Directus Curation_Data. Missing data are never treated as proof of completion.</div></section>
       <section id="samples-view" class="view" hidden>
         <div class="section-heading"><div><p class="eyebrow">Find a record</p><h2>Samples</h2></div><p class="muted" id="result-count"></p></div>
         <div class="filters">
           <label>Sample ID, taxon, field name or project<input id="query" type="search" placeholder="Search records" autocomplete="off"></label>
           <label>Project<select id="project"><option value="">All projects</option></select></label>
+          <label>Observation subject<select id="subject-filter"><option value="">All subjects</option></select></label>
           <label>CoL family<input id="family-query" type="search" list="family-suggestions" placeholder="Type family, e.g. Rubiaceae" autocomplete="off"><datalist id="family-suggestions"></datalist></label>
           <label class="filter-toggle"><input id="profiled-only" type="checkbox" disabled>Profiled samples only</label>
           <label>Order by<select id="sample-sort"><option value="source">Recorded sample order</option><option value="sample">Sample ID A–Z</option><option value="sample-desc">Sample ID Z–A</option><option value="taxon">Resolved name A–Z</option><option value="taxon-desc">Resolved name Z–A</option><option value="field">Field name A–Z</option><option value="family">Family A–Z</option><option value="project">Project A–Z</option><option value="date-desc">Newest collection first</option><option value="date">Oldest collection first</option><option value="profiled-desc">MS files first</option></select></label>
           <button id="clear" type="button" class="secondary">Clear filters</button>
         </div>
         <p id="profiled-filter-status" class="muted" role="status" aria-live="polite">Checking Directus MS files for the profiled-only filter…</p>
-        <div class="view-switch" role="group" aria-label="Sample display"><button id="view-list" type="button" aria-pressed="true">List</button><button id="view-map" type="button" aria-pressed="false">Map</button></div>
-        <div id="list-panel">
-          <div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Directus</th></tr></thead><tbody id="sample-rows"></tbody></table></div>
-          <p id="empty" class="muted" hidden>No samples match these filters.</p>
-          <div class="pager"><button id="previous" type="button" class="secondary">← Previous</button><span id="page-label"></span><button id="next" type="button" class="secondary">Next →</button></div>
+        <div class="view-switch" role="group" aria-label="Sample display"><button id="view-cards" type="button" aria-pressed="true">Cards</button><button id="view-list" type="button" aria-pressed="false">List</button><button id="view-map" type="button" aria-pressed="false">Map</button></div>
+        <div id="cards-panel"><div id="sample-cards" class="species-cards"></div></div>
+        <div id="list-panel" hidden>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="sample-rows"></tbody></table></div>
         </div>
+        <p id="empty" class="muted" hidden>No samples match these filters.</p>
+        <div id="sample-pager" class="pager" aria-label="Field-sample pages"><button id="previous" type="button" class="secondary">← Previous</button><span id="page-label"></span><button id="next" type="button" class="secondary">Next →</button></div>
         <div id="map-panel" hidden><p id="mapped-count" class="muted"></p><div id="samples-map" role="region" aria-label="Map of matching samples"></div><p id="map-status" role="status" aria-live="polite"></p></div>
       </section>
       <section id="explore-view" class="view" hidden>
@@ -80,6 +89,11 @@
       <section id="collector-view" class="view" hidden>
         <div id="collector-detail" aria-label="Field samples linked to this Directus collector"></div>
       </section>
+      <section id="compare-ms-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Directus · MS_Data</p><h2>Compare MS profiles</h2></div></div>
+        <p class="muted">Find files by sample, resolved taxon, instrument or filename; select as many Directus-linked files as needed, including samples of different species. GNPS2 overlays selected chromatograms when its external dataset is reachable.</p>
+        <div id="compare-ms-root" aria-label="Select and compare Directus-linked mass spectrometry files"></div>
+      </section>
       <section id="inaturalist-view" class="view" hidden>
         <div class="section-heading"><div><p class="eyebrow">Directus · Curation_Data</p><h2>iNaturalist identification review</h2></div></div>
         <div id="inaturalist-review" role="region" aria-label="iNaturalist and Catalogue of Life identification comparison"><p role="status">Loading linked observations…</p></div>
@@ -100,8 +114,14 @@
         <p class="species-intro">These are distinct field samples identified as this species or one of its descendants in the Taxa hierarchy. Open a field sample to see its separately recorded dried material, extracts, aliquots and MS files; a species-level MS result does not imply that every sample was profiled.</p>
         <section id="species-col" aria-label="Catalogue of Life page and Directus Taxa ancestry"></section>
         <section id="species-inat" aria-label="Externally linked iNaturalist species taxon photos" hidden></section>
-        <div id="species-cards" class="species-cards"></div>
-        <div class="pager" aria-label="Species field-sample pages"><button id="species-previous" type="button" class="secondary">← Previous</button><span id="species-page-label" role="status" aria-live="polite"></span><button id="species-next" type="button" class="secondary">Next →</button></div>
+        <div class="filters species-filters"><label>Sample ID, taxon or field name<input id="species-query" type="search" placeholder="Search linked samples" autocomplete="off"></label><label>Garden / project<select id="species-project"><option value="">All projects</option></select></label><label>Observation subject<select id="species-subject"><option value="">All subjects</option></select></label><label>Order by<select id="species-sort"><option value="source">Recorded sample order</option><option value="sample">Sample ID A–Z</option><option value="sample-desc">Sample ID Z–A</option><option value="taxon">Resolved name A–Z</option><option value="taxon-desc">Resolved name Z–A</option><option value="field">Field name A–Z</option><option value="family">Family A–Z</option><option value="project">Project A–Z</option><option value="date-desc">Newest collection first</option><option value="date">Oldest collection first</option><option value="profiled-desc">MS files first</option></select></label><label class="filter-toggle"><input id="species-profiled" type="checkbox" disabled>Profiled samples only</label></div>
+        <p id="species-filter-count" role="status" aria-live="polite"></p>
+        <div class="view-switch" role="group" aria-label="Species field sample display"><button id="species-cards-button" type="button" aria-pressed="true">Cards</button><button id="species-list-button" type="button" aria-pressed="false">List</button><button id="species-map-button" type="button" aria-pressed="false">Map</button></div>
+        <div id="species-cards-panel"><div id="species-cards" class="species-cards"></div></div>
+        <div id="species-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="species-sample-rows"></tbody></table></div></div>
+        <p id="species-empty" class="muted" hidden>No linked field samples match these filters.</p>
+        <div id="species-pager" class="pager" aria-label="Species field-sample pages"><button id="species-previous" type="button" class="secondary">← Previous</button><span id="species-page-label" role="status" aria-live="polite"></span><button id="species-next" type="button" class="secondary">Next →</button></div>
+        <div id="species-map-panel" hidden><div id="species-map-root"></div></div>
         <section id="species-metabolome" aria-label="LOTUS metabolite search for this species" hidden></section>
         <section id="species-chemcalc" aria-label="ChemCalc formula and adduct calculator"></section>
       </section>
@@ -110,11 +130,11 @@
         <div class="section-heading"><div><p class="eyebrow">Resolved Taxa · Directus classification</p><h2 id="taxon-title"></h2><p id="taxon-summary" class="muted"></p></div></div>
         <section id="taxon-col" aria-label="Catalogue of Life page and Directus Taxa ancestry"></section>
         <p class="species-intro">Includes field samples identified directly at this rank and at every descendant rank in Directus Taxa. Taxon names alone do not establish a match.</p>
-        <div class="filters taxon-filters"><label>Sample ID, taxon or field name<input id="taxon-query" type="search" placeholder="Search within this taxon" autocomplete="off"></label><label>Garden / project<select id="taxon-project"><option value="">All projects</option></select></label><label>Identification rank<select id="taxon-rank"><option value="">All ranks</option></select></label><label>Order by<select id="taxon-sort"><option value="source">Recorded sample order</option><option value="sample">Sample ID A–Z</option><option value="sample-desc">Sample ID Z–A</option><option value="taxon">Resolved name A–Z</option><option value="taxon-desc">Resolved name Z–A</option><option value="field">Field name A–Z</option><option value="family">Family A–Z</option><option value="project">Project A–Z</option><option value="date-desc">Newest collection first</option><option value="date">Oldest collection first</option><option value="profiled-desc">MS files first</option></select></label><label class="filter-toggle"><input id="taxon-profiled" type="checkbox" disabled>Profiled samples only</label></div>
+        <div class="filters taxon-filters"><label>Sample ID, taxon or field name<input id="taxon-query" type="search" placeholder="Search within this taxon" autocomplete="off"></label><label>Garden / project<select id="taxon-project"><option value="">All projects</option></select></label><label>Observation subject<select id="taxon-subject"><option value="">All subjects</option></select></label><label>Identification rank<select id="taxon-rank"><option value="">All ranks</option></select></label><label>Order by<select id="taxon-sort"><option value="source">Recorded sample order</option><option value="sample">Sample ID A–Z</option><option value="sample-desc">Sample ID Z–A</option><option value="taxon">Resolved name A–Z</option><option value="taxon-desc">Resolved name Z–A</option><option value="field">Field name A–Z</option><option value="family">Family A–Z</option><option value="project">Project A–Z</option><option value="date-desc">Newest collection first</option><option value="date">Oldest collection first</option><option value="profiled-desc">MS files first</option></select></label><label class="filter-toggle"><input id="taxon-profiled" type="checkbox" disabled>Profiled samples only</label></div>
         <p id="taxon-filter-count" role="status" aria-live="polite"></p>
-        <div class="view-switch" role="group" aria-label="Related field sample display"><button id="taxon-cards-button" type="button" aria-pressed="true">Cards</button><button id="taxon-map" type="button" aria-pressed="false">Map</button><button id="taxon-table-button" type="button" aria-pressed="false">List</button></div>
+        <div class="view-switch" role="group" aria-label="Related field sample display"><button id="taxon-cards-button" type="button" aria-pressed="true">Cards</button><button id="taxon-table-button" type="button" aria-pressed="false">List</button><button id="taxon-map" type="button" aria-pressed="false">Map</button></div>
         <div id="taxon-cards-panel"><div id="taxon-cards" class="species-cards"></div></div>
-        <div id="taxon-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Directus</th></tr></thead><tbody id="taxon-sample-rows"></tbody></table></div></div>
+        <div id="taxon-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="taxon-sample-rows"></tbody></table></div></div>
         <p id="taxon-empty" class="muted" hidden>No linked field samples match these filters.</p>
         <div id="taxon-pager" class="pager"><button id="taxon-previous" type="button" class="secondary">← Previous</button><span id="taxon-page-label" role="status" aria-live="polite"></span><button id="taxon-next" type="button" class="secondary">Next →</button></div>
         <div id="taxon-map-panel" hidden><div id="taxon-map-root"></div></div>
@@ -124,6 +144,7 @@
         <div class="sample-heading">
           <div><p class="eyebrow">Field record</p><h2 id="detail-title"></h2><p class="sample-code" id="detail-id"></p><p id="detail-species" hidden></p></div>
         </div>
+        <div id="sample-subject" class="sample-subject" aria-label="Directus Field_Data observation subject" hidden></div>
         <div id="sample-overview" class="sample-overview">
           <div class="sample-identity">
             <dl id="detail-fields" class="details"></dl>

@@ -15,8 +15,9 @@ class Element {
       ...this.children.flatMap(child => child instanceof Element ? child.findAll(tag) : [])];
   }
 }
-global.document = {createElement: tag => new Element(tag)};
+global.document = {createElement: tag => new Element(tag), createElementNS: (_namespace, tag) => new Element(tag)};
 global.window = {};
+require("../sample_subject.js");
 require("../collector_map.js");
 const {mount} = window.DBGICollectorMap;
 const taxon = [3, "COL-3", "Coffea arabica", "L.", "species", null];
@@ -138,5 +139,26 @@ test("a genus map retains every descendant sample and links genus-resolved and s
   assert.deepEqual(api.lastPopup.content.findAll("a").map((link) => link.href), ["#taxon/2984", "#sample/11"]);
   points[1].click();
   assert.deepEqual(api.lastPopup.content.findAll("a").map((link) => link.href), ["#species/2990", "#sample/12"]);
+  controller.destroy();
+});
+
+test("collector maps include geolocated field records without a resolved species and never fabricate species links", async () => {
+  const {api, markers} = fakeLeaflet();
+  global.L = api;
+  const root = new Element("div");
+  const unresolved = {...observation(44, 7.1, 46.8), taxon: null};
+  unresolved.row[3] = "Recorded name only";
+  unresolved.row[9] = "Root";
+  const controller = mount({root, observations: [unresolved],
+    loadLeaflet: () => Promise.resolve(),
+    renderScientificTaxon: () => { throw new Error("Cannot render a missing taxon"); },
+    scopeLabel: "field"});
+  await controller.ready;
+  const marker = markers.find(item => item.kind === "marker");
+  assert.match(marker.options.title, /Recorded name only/);
+  marker.click();
+  assert.deepEqual(api.lastPopup.content.findAll("a").map(link => link.href), ["#sample/44"]);
+  assert.match(api.lastPopup.content.textContent, /Recorded field name \(no resolved species\): Recorded name only/);
+  assert.equal(api.lastPopup.content.findAll("span")[0].attributes["aria-label"], "Observation subject: Root");
   controller.destroy();
 });

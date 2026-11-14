@@ -26,6 +26,9 @@ const speciesByTaxon = new Map();
 const speciesRows = new Map();
 let speciesPage = 0;
 let selectedSpeciesId = null;
+let visibleSpeciesRows = [];
+let speciesView = "cards";
+let speciesMapController;
 let selectedTaxonPageId = null;
 let taxonPage = 0;
 let taxonRows = [];
@@ -46,7 +49,7 @@ let msProfileError = "";
 let processingIndex;
 let processingPromise;
 let processingError = "";
-let sampleView = "list";
+let sampleView = "cards";
 let leafletPromise;
 let samplesMap;
 let markerLayer;
@@ -161,14 +164,27 @@ function sampleFilterLink(parent, label, {project = "", family = "", map = false
     $("query").value = "";
     $("project").value = project;
     $("family-query").value = family;
+    $("subject-filter").value = "";
+    sampleView = map ? "map" : "cards";
     filter();
-    sampleView = map ? "map" : "list";
   });
   return link;
 }
 
 
+function addMSCompareButton(parent, row, label = "Add MS files to comparison") {
+  if (!msProfileIndex || !window.MSCompare.hasField(row[0], msProfileIndex)) return false;
+  const button = element("button", label, parent, "compare-ms-add");
+  button.type = "button";
+  button.addEventListener("click", () => {
+    window.MSCompare.addField(row[0], msProfileIndex);
+    location.hash = "#compare-ms";
+  });
+  return true;
+}
+
 function show(view) {
+  if (view !== "compare-ms") $("compare-ms-root").replaceChildren();
   if (view !== "collector") collectorsView?.hide();
   if (view !== "detail") {
     $("sample-map").removeAttribute("src");
@@ -189,6 +205,10 @@ function show(view) {
     $("species-chemcalc").hidden = true;
   }
   if (view !== "species") $("species-col").replaceChildren();
+  if (view !== "species") {
+    speciesMapController?.destroy();
+    speciesMapController = null;
+  }
   if (view !== "taxon") $("taxon-col").replaceChildren();
   if (view !== "taxon") {
     taxonMapController?.destroy();
@@ -202,14 +222,14 @@ function show(view) {
   }
   document.title = `${view === "home" ? "Sample explorer" : view[0].toUpperCase() + view.slice(1)} · DBGI`;
   if (view === "samples" && (msProfileIndex || processingIndex || msProfileError || processingError)) renderPage();
-  if (view === "samples" && sampleView === "map") setSampleView("map");
+  if (view === "samples") void setSampleView(sampleView);
   if (view === "treemap" && treemapRoot) renderTreemap();
   if (view === "inaturalist") renderInaturalistReview();
   if ((view === "detail" || view === "inaturalist") && !inaturalistPromise) {
     inaturalistPromise = loadInaturalist();
   }
   if ((view === "detail" || view === "species") && !wikidataPromise) wikidataPromise = loadWikidataTaxa();
-  if (["detail", "species", "taxon", "samples"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
+  if (["detail", "species", "taxon", "samples", "compare-ms"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
   if (["detail", "species", "taxon", "samples"].includes(view) && !processingPromise) processingPromise = loadProcessing();
 }
 
@@ -226,7 +246,7 @@ async function showCollectors(hash) {
   }
   try {
     if (!collectorsPromise) collectorsPromise = (async () => {
-      const response = await fetch("data/collectors.json");
+      const response = await fetch("data/collectors.json", {cache: "no-cache"});
       if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
       const snapshot = await response.json();
       if (snapshot.source !== directusBase || snapshot.sample_snapshot_generated_at !== sampleSnapshot.generated_at) {
@@ -276,10 +296,21 @@ function route() {
     const taxon = Number.isSafeInteger(id) ? taxaById.get(id) : undefined;
     if (taxon?.[4] === "species" && speciesRows.has(id)) {
       $("status").textContent = "";
-      if (selectedSpeciesId !== id) speciesPage = 0;
+      if (selectedSpeciesId !== id) {
+        speciesPage = 0;
+        $("species-query").value = "";
+        $("species-project").value = "";
+        $("species-subject").value = "";
+        $("species-sort").value = "source";
+        $("species-profiled").checked = false;
+        speciesView = "cards";
+        speciesMapController?.destroy();
+        speciesMapController = null;
+      }
       selectedSpeciesId = id;
       renderSpecies(taxon);
       show("species");
+      setSpeciesView(speciesView);
       setTimeout(() => scrollTo(0, 0), 0);
       return;
     }
@@ -297,6 +328,7 @@ function route() {
         taxonPage = 0;
         $("taxon-query").value = "";
         $("taxon-project").value = "";
+        $("taxon-subject").value = "";
         $("taxon-rank").value = "";
         $("taxon-sort").value = "source";
         $("taxon-profiled").checked = false;
@@ -309,6 +341,13 @@ function route() {
     }
     $("status").textContent = "Taxon not found in this Directus snapshot.";
     show("samples");
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
+  if (hash === "compare-ms") {
+    $("status").textContent = "";
+    show("compare-ms");
+    renderMSCompare();
     setTimeout(() => scrollTo(0, 0), 0);
     return;
   }
@@ -726,6 +765,7 @@ function filter({keepMapSelection = false} = {}) {
   const matchingFamilies = familyQuery ? new Set(families.filter((entry) =>
     taxaById.get(entry.id)[2].toLocaleLowerCase().includes(familyQuery)).map((entry) => entry.id)) : null;
   filtered = sortedSamples(rows.filter((row) => projectMatches(row[2], project) &&
+    window.DBGIObservationSubject.matches(row[9], $("subject-filter").value) &&
     (!matchingFamilies || matchingFamilies.has(familyOf(row[7])?.[0])) &&
     (!selectedTreemapTaxa || selectedTreemapTaxa.has(row[7])) &&
     (!mapSelection || mapSelection.has(row[0])) &&
@@ -751,13 +791,19 @@ function renderPage() {
   $("next").disabled = page >= totalPages - 1;
   $("empty").hidden = filtered.length !== 0;
   const body = $("sample-rows");
+  const cards = $("sample-cards");
   body.replaceChildren();
-  for (const row of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) renderSampleTableRow(body, row);
+  cards.replaceChildren();
+  for (const row of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
+    renderSampleTableRow(body, row);
+    renderFieldSampleCard(cards, row);
+  }
 }
 function renderSampleTableRow(body, row) {
   const tr = element("tr", "", body);
   const cell = element("td", "", tr);
   const link = element("a", row[1], cell);
+  tr.append(window.DBGIObservationSubject.cell(row[9]));
   link.href = `#sample/${row[0]}`;
   const taxonCell = element("td", "", tr);
   const resolved = taxaById.get(row[7]);
@@ -769,6 +815,8 @@ function renderSampleTableRow(body, row) {
   element("td", projectName(row[2]), tr);
   element("td", displayCollectionDate(row[6]), tr);
   renderSampleStages(row, element("td", "", tr));
+  const compareCell = element("td", "", tr);
+  addMSCompareButton(compareCell, row, "Add files ↗");
   itemLink(element("td", "", tr), "Field_Data", row[0], "Open ↗", `Open ${row[1]} in Directus`);
 }
 function renderSampleStages(row, parent) {
@@ -788,15 +836,22 @@ function renderSampleStages(row, parent) {
     `stage-badge ${profiled ? "stage-badge--ms" : "stage-badge--unknown"}`);
 }
 
+function updateSubjectOptions(select, records) {
+  const selected = select.value;
+  window.DBGIObservationSubject.populate(select, records);
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
+}
+
 function renderSpecies(taxon) {
   const title = $("species-title");
   title.replaceChildren();
   scientificTaxon(title, taxon);
   const specimens = speciesRows.get(taxon[0]) || [];
+  updateSubjectOptions($("species-subject"), specimens);
   $("species-summary").textContent = `${format(specimens.length)} linked field ${specimens.length === 1 ? "sample" : "samples"} · Taxa #${taxon[0]} · CoL ${taxon[1]}`;
   renderTaxonClassification($("species-col"), taxon);
   renderSpeciesMS(taxon);
-  renderSpeciesCards();
+  applySpeciesFilters(false);
   renderSpeciesMetabolome(taxon);
   window.SpeciesINat.render($("species-inat"), {taxon, mapping: wikidataTaxa});
   window.ChemCalc.render($("species-chemcalc"));
@@ -806,6 +861,7 @@ function renderUpperTaxon(taxon) {
   taxonMapController?.destroy();
   taxonMapController = null;
   taxonRows = rows.filter((row) => row[7] != null && belongsToTaxon(row[7], taxon[0]));
+  updateSubjectOptions($("taxon-subject"), taxonRows);
   const title = $("taxon-title");
   title.replaceChildren();
   scientificTaxon(title, taxon);
@@ -832,6 +888,7 @@ function applyTaxonFilters() {
   const profiledOnly = $("taxon-profiled").checked;
   visibleTaxonRows = sortedSamples(taxonRows.filter((row) =>
     projectMatches(row[2], project) &&
+    window.DBGIObservationSubject.matches(row[9], $("taxon-subject").value) &&
     (!rank || taxaById.get(row[7])[4] === rank) &&
     (!profiledOnly || msProfileIndex?.byField.has(row[0])) &&
     sampleSearchMatches(row, query)), $("taxon-sort").value);
@@ -915,14 +972,21 @@ function renderSpeciesMS(taxon) {
 function renderFieldSampleCard(cards, row) {
   const card = element("article", "", cards, "species-card");
   const heading = element("h3", "", card);
+  window.DBGIObservationSubject.inline(heading, row[9]);
   const sample = element("a", row[1], heading);
   sample.href = `#sample/${row[0]}`;
   const identifyingTaxon = taxaById.get(row[7]);
-  const identification = element("p", "Resolved as ", card, "species-identification");
-  const taxonLink = element("a", "", identification);
-  scientificTaxon(taxonLink, identifyingTaxon);
-  taxonLink.href = taxonHref(identifyingTaxon);
-  element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${row[6] ? ` · ${row[6]}` : ""}`, card, "muted");
+  const identification = element("p", identifyingTaxon ? "Resolved as " : "Not resolved in Directus Taxa", card, "species-identification");
+  if (identifyingTaxon) {
+    const taxonLink = element("a", "", identification);
+    scientificTaxon(taxonLink, identifyingTaxon);
+    taxonLink.href = taxonHref(identifyingTaxon);
+  }
+  if (row[3] && (!identifyingTaxon || row[3] !== resolvedName(identifyingTaxon))) {
+    element("p", `Field name: ${row[3]}`, card, "muted");
+  }
+  const date = displayCollectionDate(row[6]);
+  element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${date === "—" ? "" : ` · ${date}`}`, card, "muted");
   if (processingIndex) {
     const stages = processingIndex.byField.get(row[0]) || [];
     const counts = ["dried", "extract", "aliquot", "ms"].map((kind) => stages.filter((record) => record[0] === kind).length);
@@ -930,21 +994,72 @@ function renderFieldSampleCard(cards, row) {
   } else {
     element("p", processingError ? "Processing snapshot unavailable." : "Checking downstream records…", card, "muted");
   }
+  addMSCompareButton(card, row);
   itemLink(card, "Field_Data", row[0], `Directus Field_Data #${row[0]} ↗`, `Open field sample ${row[1]} in Directus`);
 }
 
-function renderSpeciesCards() {
+function applySpeciesFilters(resetPage = true) {
+  if (selectedSpeciesId == null) return;
   const specimens = speciesRows.get(selectedSpeciesId) || [];
-  const totalPages = Math.max(1, Math.ceil(specimens.length / PAGE_SIZE));
+  const query = $("species-query").value.trim().toLocaleLowerCase();
+  const project = $("species-project").value;
+  const profiledOnly = $("species-profiled").checked;
+  visibleSpeciesRows = sortedSamples(specimens.filter((row) =>
+    projectMatches(row[2], project) &&
+    window.DBGIObservationSubject.matches(row[9], $("species-subject").value) &&
+    (!profiledOnly || msProfileIndex?.byField.has(row[0])) &&
+    sampleSearchMatches(row, query)), $("species-sort").value);
+  if (resetPage) speciesPage = 0;
+  renderSpeciesCards();
+  if (speciesView === "map" && !$("species-view").hidden) {
+    speciesMapController?.destroy();
+    speciesMapController = null;
+    setSpeciesView("map");
+  }
+}
+
+function renderSpeciesCards() {
+  const totalPages = Math.max(1, Math.ceil(visibleSpeciesRows.length / PAGE_SIZE));
   speciesPage = Math.min(Math.max(0, speciesPage), totalPages - 1);
+  $("species-filter-count").textContent = `${format(visibleSpeciesRows.length)} of ${format((speciesRows.get(selectedSpeciesId) || []).length)} linked field samples`;
   $("species-page-label").textContent = `Page ${speciesPage + 1} of ${totalPages}`;
   $("species-previous").disabled = speciesPage === 0;
   $("species-next").disabled = speciesPage >= totalPages - 1;
+  $("species-empty").hidden = visibleSpeciesRows.length > 0 || speciesView === "map";
   const cards = $("species-cards");
+  const table = $("species-sample-rows");
   cards.replaceChildren();
-  for (const row of specimens.slice(speciesPage * PAGE_SIZE, (speciesPage + 1) * PAGE_SIZE)) {
+  table.replaceChildren();
+  for (const row of visibleSpeciesRows.slice(speciesPage * PAGE_SIZE, (speciesPage + 1) * PAGE_SIZE)) {
     renderFieldSampleCard(cards, row);
+    renderSampleTableRow(table, row);
   }
+}
+
+function setSpeciesView(view) {
+  speciesView = view;
+  $("species-cards-panel").hidden = view !== "cards";
+  $("species-list-panel").hidden = view !== "list";
+  $("species-map-panel").hidden = view !== "map";
+  $("species-pager").hidden = view === "map";
+  $("species-empty").hidden = visibleSpeciesRows.length > 0 || view === "map";
+  for (const [id, mode] of [["species-cards-button", "cards"], ["species-list-button", "list"], ["species-map-button", "map"]]) {
+    $(id).setAttribute("aria-pressed", String(view === mode));
+  }
+  if (view !== "map") {
+    speciesMapController?.destroy();
+    speciesMapController = null;
+    return;
+  }
+  if (speciesMapController || $("species-view").hidden) return;
+  speciesMapController = window.DBGICollectorMap.mount({
+    root: $("species-map-root"),
+    observations: visibleSpeciesRows.map((row) => ({row, taxon: taxaById.get(row[7])})),
+    loadLeaflet,
+    renderScientificTaxon: scientificTaxon,
+    scopeLabel: taxaById.get(selectedSpeciesId)[2],
+    taxonHref,
+  });
 }
 
 function renderSpeciesMetabolome(taxon) {
@@ -980,8 +1095,11 @@ function loadLeaflet() {
 
 async function setSampleView(view) {
   sampleView = view;
+  $("cards-panel").hidden = view !== "cards";
   $("list-panel").hidden = view !== "list";
   $("map-panel").hidden = view !== "map";
+  $("sample-pager").hidden = view === "map";
+  $("view-cards").setAttribute("aria-pressed", String(view === "cards"));
   $("view-list").setAttribute("aria-pressed", String(view === "list"));
   $("view-map").setAttribute("aria-pressed", String(view === "map"));
   if (view !== "map" || $("samples-view").hidden) return;
@@ -1073,6 +1191,7 @@ function renderMapMarkers() {
         }).addTo(markerLayer);
         point.on("click", () => {
           const content = element("div", "", null);
+          window.DBGIObservationSubject.inline(content, row[9]);
           element("strong", row[1], content);
           const link = element("a", "Open ", content);
           scientificTaxon(link, taxaById.get(row[7]));
@@ -1103,6 +1222,7 @@ function renderMapMarkers() {
       if (precise) element("p", `${bucket.rows[0][5]}, ${bucket.rows[0][4]} (latitude, longitude)`, content);
       for (const row of bucket.rows.slice(0, 20)) {
         const line = element("div", "", content);
+        window.DBGIObservationSubject.inline(line, row[9]);
         const link = element("a", `${row[1]} · `, line);
         scientificTaxon(link, taxaById.get(row[7]));
         link.href = `#sample/${row[0]}`;
@@ -1128,6 +1248,7 @@ function detail(row) {
   $("detail-title").replaceChildren();
   scientificTaxon($("detail-title"), taxon);
   $("detail-id").textContent = row[1];
+  window.DBGIObservationSubject.show($("sample-subject"), row[9]);
   const species = speciesOf(row[7]);
   const speciesLink = $("detail-species");
   speciesLink.replaceChildren();
@@ -1249,7 +1370,7 @@ function renderInaturalistReview() {
 
 async function loadInaturalist() {
   try {
-    const response = await fetch("data/inaturalist.json");
+    const response = await fetch("data/inaturalist.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     inaturalistData = await response.json();
   } catch (error) {
@@ -1269,7 +1390,7 @@ function renderMetabolomeDetail(taxon) {
 
 async function loadWikidataTaxa() {
   try {
-    const response = await fetch("data/wikidata_taxa.json");
+    const response = await fetch("data/wikidata_taxa.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     const mapping = await response.json();
     if (mapping.property !== "P10585" || !Array.isArray(mapping.rows)) {
@@ -1290,11 +1411,20 @@ async function loadWikidataTaxa() {
   }
 }
 
+function renderMSCompare() {
+  const root = $("compare-ms-root");
+  root.replaceChildren();
+  if (msProfileIndex) window.MSCompare.render(root, {index: msProfileIndex, rowsById: byId, taxaById, directusBase});
+  else element("p", msProfileError ? "Directus MS profiling snapshot unavailable." :
+    "Loading Directus MS profiling records…", root, "muted");
+}
+
 function renderMSDetail(row) {
   const root = $("sample-ms");
   root.replaceChildren();
   if (msProfileIndex) {
     window.MSProfile.render(root, {row, taxaById, index: msProfileIndex, directusBase});
+    addMSCompareButton(root, row, "Add this sample’s MS files to comparison");
   } else {
     element("span", msProfileError ? "MS profiling snapshot unavailable." : "Checking MS profiles…", root, "muted");
   }
@@ -1325,7 +1455,7 @@ function renderProcessingDetail(row) {
 
 async function loadProcessing() {
   try {
-    const response = await fetch("data/processing.json");
+    const response = await fetch("data/processing.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     processingIndex = window.DBGIProcessing.buildIndex(await response.json(), byId, directusBase);
   } catch (error) {
@@ -1345,7 +1475,7 @@ async function loadProcessing() {
 
 async function loadMSProfiles() {
   try {
-    const response = await fetch("data/ms_profile.json");
+    const response = await fetch("data/ms_profile.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     const snapshot = await response.json();
     if (!directusBase || snapshot.source !== `${directusBase}/items/` ||
@@ -1368,10 +1498,17 @@ async function loadMSProfiles() {
     const taxon = taxaById.get(Number(location.hash.slice(9)));
     if (taxon?.[4] === "species") renderSpeciesMS(taxon);
   }
+  if (!$("compare-ms-view").hidden) renderMSCompare();
   if (!msProfileIndex) $("profiled-only").checked = false;
   $("profiled-only").disabled = !msProfileIndex;
   if (!msProfileIndex) $("taxon-profiled").checked = false;
   $("taxon-profiled").disabled = !msProfileIndex;
+  if (!msProfileIndex) $("species-profiled").checked = false;
+  $("species-profiled").disabled = !msProfileIndex;
+  if (!$("species-view").hidden) {
+    if ($("species-profiled").checked || $("species-sort").value === "profiled-desc") applySpeciesFilters(false);
+    else renderSpeciesCards();
+  }
   if (!$("taxon-view").hidden) applyTaxonFilters();
   $("profiled-filter-status").hidden = !!msProfileIndex && !$("profiled-only").checked;
   $("profiled-filter-status").textContent = msProfileError ?
@@ -1384,16 +1521,16 @@ async function loadMSProfiles() {
 
 async function load() {
   try {
-    const response = await fetch("data/samples.json");
+    const response = await fetch("data/samples.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     const snapshot = await response.json();
     if (!Array.isArray(snapshot.rows) || !Array.isArray(snapshot.taxa) ||
-        snapshot.columns?.join(",") !== "directus_id,sample_id,project,recorded_taxon,longitude,latitude,date,taxon_id,resolution_status" ||
+        snapshot.columns?.join(",") !== "directus_id,sample_id,project,recorded_taxon,longitude,latitude,date,taxon_id,resolution_status,observation_subject" ||
         snapshot.taxon_columns?.join(",") !== "id,col_id,scientific_name,authorship,rank,parent_id,backbone_version") {
       throw new Error("Unexpected snapshot format; rebuild it with the current exporter");
     }
     try {
-      const gardenResponse = await fetch("data/gardens.json");
+      const gardenResponse = await fetch("data/gardens.json", {cache: "no-cache"});
       if (!gardenResponse.ok) throw new Error(`Garden catalog request returned HTTP ${gardenResponse.status}`);
       gardenCatalog = await gardenResponse.json();
       if (!Array.isArray(gardenCatalog.gardens) || gardenCatalog.gardens.length !== 5) {
@@ -1420,6 +1557,7 @@ async function load() {
     }
     sampleSnapshot = snapshot;
     rows = snapshot.rows;
+    window.DBGIObservationSubject.populate($("subject-filter"), rows);
     for (const taxon of snapshot.taxa) taxaById.set(taxon[0], taxon);
     const groups = new Map();
     const familyGroups = new Map();
@@ -1487,11 +1625,13 @@ async function load() {
         option.value = `p:${alias}`;
       }
     }
+    $("species-project").append(...[...$("taxon-project").children].slice(1).map((option) => option.cloneNode(true)));
     for (const family of [...families].sort((a, b) => taxaById.get(a.id)[2].localeCompare(taxaById.get(b.id)[2]))) {
       const option = element("option", "", $("family-suggestions"));
       option.value = taxaById.get(family.id)[2];
     }
-    $("updated").textContent = `Snapshot: ${new Date(snapshot.generated_at).toLocaleDateString()} · ${format(snapshot.total_rows)} source records`;
+    $("updated").textContent = `${format(snapshot.total_rows)} source records`;
+    void window.DBGIRefreshStatus.load($("refresh-status"), snapshot);
     summary(); explore(); filter(); buildTreemap(); route();
   } catch (error) {
     $("status").textContent = `Could not load the sample snapshot: ${error.message}. Run the snapshot builder or try again later.`;
@@ -1501,7 +1641,7 @@ async function load() {
 async function loadGardenProgress() {
   const root = $("garden-progress-chart");
   try {
-    const response = await fetch("data/garden_progress.json");
+    const response = await fetch("data/garden_progress.json", {cache: "no-cache"});
     if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
     window.GardenProgress.render(root, await response.json());
     addTableControls(root.querySelector("table"), "garden progress rows");
@@ -1513,6 +1653,7 @@ async function loadGardenProgress() {
 
 $("query").addEventListener("input", () => { selectedTaxonId = null; selectedTreemapTaxa = null; filter(); });
 $("project").addEventListener("change", () => { selectedTreemapTaxa = null; filter(); });
+$("subject-filter").addEventListener("change", filter);
 $("family-query").addEventListener("input", () => { selectedTreemapTaxa = null; filter(); });
 $("sample-sort").addEventListener("change", filter);
 $("profiled-only").addEventListener("change", () => {
@@ -1521,7 +1662,7 @@ $("profiled-only").addEventListener("change", () => {
 });
 $("clear").addEventListener("click", () => {
   selectedTaxonId = null; selectedTreemapTaxa = null;
-  $("query").value = ""; $("project").value = ""; $("family-query").value = ""; $("sample-sort").value = "source";
+  $("query").value = ""; $("project").value = ""; $("subject-filter").value = ""; $("family-query").value = ""; $("sample-sort").value = "source";
   $("profiled-only").checked = false;
   $("profiled-filter-status").hidden = !!msProfileIndex;
   filter();
@@ -1537,23 +1678,30 @@ for (const id of ["family-table-query", "family-table-sort"]) {
 }
 new ResizeObserver(() => renderTreemap()).observe($("treemap-canvas"));
 $("previous").addEventListener("click", () => { page--; renderPage(); });
+$("view-cards").addEventListener("click", () => setSampleView("cards"));
 $("view-list").addEventListener("click", () => setSampleView("list"));
 $("view-map").addEventListener("click", () => setSampleView("map"));
 $("next").addEventListener("click", () => { page++; renderPage(); });
+$("species-cards-button").addEventListener("click", () => setSpeciesView("cards"));
+$("species-list-button").addEventListener("click", () => setSpeciesView("list"));
+$("species-map-button").addEventListener("click", () => setSpeciesView("map"));
+for (const id of ["species-query", "species-project", "species-subject", "species-sort", "species-profiled"]) {
+  $(id).addEventListener(id === "species-query" ? "input" : "change", applySpeciesFilters);
+}
 $("species-previous").addEventListener("click", () => {
   speciesPage--;
   renderSpeciesCards();
-  $("species-cards").scrollIntoView({block: "start"});
+  $(speciesView === "list" ? "species-list-panel" : "species-cards-panel").scrollIntoView({block: "start"});
 });
 $("species-next").addEventListener("click", () => {
   speciesPage++;
   renderSpeciesCards();
-  $("species-cards").scrollIntoView({block: "start"});
+  $(speciesView === "list" ? "species-list-panel" : "species-cards-panel").scrollIntoView({block: "start"});
 });
 $("taxon-cards-button").addEventListener("click", () => setTaxonView("cards"));
 $("taxon-table-button").addEventListener("click", () => setTaxonView("list"));
 $("taxon-map").addEventListener("click", () => setTaxonView("map"));
-for (const id of ["taxon-query", "taxon-project", "taxon-rank", "taxon-sort", "taxon-profiled"]) {
+for (const id of ["taxon-query", "taxon-project", "taxon-subject", "taxon-rank", "taxon-sort", "taxon-profiled"]) {
   $(id).addEventListener(id === "taxon-query" ? "input" : "change", applyTaxonFilters);
 }
 $("taxon-previous").addEventListener("click", () => {
@@ -1572,10 +1720,12 @@ $("hero-search").addEventListener("submit", (event) => {
   selectedTreemapTaxa = null;
   $("query").value = $("hero-query").value;
   $("project").value = "";
+  $("subject-filter").value = "";
   $("profiled-only").checked = false;
   $("profiled-filter-status").hidden = !!msProfileIndex;
   $("family-query").value = "";
   filter();
+  sampleView = "cards";
   location.hash = "#samples";
 });
 addEventListener("hashchange", route);

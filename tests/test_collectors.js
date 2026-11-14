@@ -22,8 +22,9 @@ class Node {
   }
 }
 global.Element = Node;
-global.document = {createElement: tag => new Node(tag)};
+global.document = {createElement: tag => new Node(tag), createElementNS: (_namespace, tag) => new Node(tag)};
 global.window = {};
+require("../sample_subject.js");
 require("../collector_map.js");
 require("../collectors.js");
 const {create} = window.DBGICollectors;
@@ -70,7 +71,7 @@ test("ranks distinct People identities and links only linked sample IDs", () => 
   assert.match(leaderboardRoot.textContent, /2 samples have a recorded collector name but no People link and are excluded/);
   assert.equal(view.detail(12), true);
   assert.deepEqual(detailRoot.byClass("collectors__species-link").map(link => link.href), ["#species/3"]);
-  detailRoot.byClass("collectors__tab--samples")[0].click();
+  detailRoot.byClass("collectors__tab--cards")[0].click();
   assert.deepEqual(detailRoot.byClass("collectors__sample-link").map(link => link.href), ["#sample/82"]);
   assert.equal(detailRoot.byClass("collectors__sample-source")[0].href, `${base}/admin/content/Field_Data/82`);
   assert.equal(detailRoot.byClass("collectors__source")[0].href, `${base}/admin/content/People/12`);
@@ -85,6 +86,7 @@ test("verified Directus identities and DBGI team links appear on a collector car
   view.leaderboard();
   const card = leaderboardRoot.byClass("collectors__card")[0];
   assert.equal(card.href, "#collector/25");
+  assert.doesNotMatch(card.textContent, /People ID|People #/);
   assert.equal(card.findAll("a").length, 1);
   assert.equal(card.findAll("img")[0].src, "assets/collectors/25.webp");
   const external = leaderboardRoot.byClass("collectors__profile-links")[0].findAll("a");
@@ -97,6 +99,7 @@ test("verified Directus identities and DBGI team links appear on a collector car
     external.map(link => link.href));
   assert.equal(detailRoot.byClass("collectors__person-header")[0].findAll("img")[0].src,
     "assets/collectors/25.webp");
+  assert.doesNotMatch(detailRoot.byClass("collectors__person-header")[0].textContent, /People ID|People #/);
   const {view: plainView, leaderboardRoot: plainRoot} = ui(fixture([
     {id: 25, name: "No verified profile", field_ids: [1]}]));
   plainView.leaderboard();
@@ -112,9 +115,9 @@ test("verified Directus identities and DBGI team links appear on a collector car
 test("paginates all linked samples with complete first and last pages", () => {
   const {view, detailRoot} = ui();
   assert.equal(view.detail(11), true);
-  detailRoot.byClass("collectors__tab--samples")[0].click();
+  detailRoot.byClass("collectors__tab--cards")[0].click();
   const links = () => detailRoot.byClass("collectors__sample-link").map(link => link.href);
-  const [previous, next] = detailRoot.byClass("collectors__samples-panel")[0].findAll("button");
+  const [previous, next] = detailRoot.byClass("collectors__pager")[0].findAll("button");
   assert.deepEqual(links(), ids.slice(0, 40).map(id => `#sample/${id}`));
   assert.equal(previous.disabled, true);
   next.click();
@@ -246,17 +249,19 @@ test("sample search and sorting precede pagination and respect collector and spe
   samples.set(81, [81, "Rare specimen", "Rare project", "Special field", null, null, "2025-03-01", 5, null]);
   const {view, detailRoot} = ui(fixture(), samples);
   view.detail(11);
-  detailRoot.byClass("collectors__tab--samples")[0].click();
+  detailRoot.byClass("collectors__tab--cards")[0].click();
   const panel = detailRoot.byClass("collectors__samples-panel")[0];
   const links = () => panel.byClass("collectors__sample-link").map(link => link.href);
-  const search = panel.findAll("input")[0];
-  const sort = panel.findAll("select")[0];
-  const next = panel.byClass("collectors__pager")[0].findAll("button")[1];
+  const filters = detailRoot.byClass("collectors__filters")[0];
+  const search = filters.findAll("input")[0];
+  const sort = filters.findAll("select")[0];
+  const pager = detailRoot.byClass("collectors__pager")[0];
+  const next = pager.findAll("button")[1];
   next.click();
   search.value = "Special field";
   search.listeners.input();
   assert.deepEqual(links(), ["#sample/81"]);
-  assert.match(panel.textContent, /Page 1 of 1/);
+  assert.match(pager.textContent, /Page 1 of 1/);
   search.value = "Rare project";
   search.listeners.input();
   assert.deepEqual(links(), ["#sample/81"]);
@@ -283,9 +288,38 @@ test("sample search and sorting precede pagination and respect collector and spe
   search.value = "82";
   search.listeners.input();
   assert.deepEqual(links(), []);
-  assert.match(panel.textContent, /0 samples/);
+  assert.match(pager.textContent, /0 samples/);
   detailRoot.byClass("collectors__clear-filter")[0].click();
   assert.deepEqual(links(), []);
+});
+
+test("collector list has a dedicated source-subject column and filters the full sample set before paging", () => {
+  const samples = new Map(byId);
+  samples.set(1, [...byId.get(1), "Flower"]);
+  const {view, detailRoot} = ui(fixture([{id: 11, name: "Collector", field_ids: [1, 2]}]), samples);
+  view.detail(11);
+  const card = detailRoot.byClass("collectors__sample")[0];
+  assert.equal(card.byClass("sample-subject__mark")[0].attributes["aria-label"], "Observation subject: Flower");
+  assert.equal(detailRoot.byClass("collectors__sample")[1].byClass("sample-subject__mark").length, 0);
+  detailRoot.byClass("collectors__tab--list")[0].click();
+  const list = detailRoot.byClass("collectors__list-panel")[0];
+  const columns = list.findAll("thead")[0].findAll("th");
+  assert.equal(columns[1].textContent, "Observation subject");
+  const rows = list.findAll("tbody")[0].findAll("tr");
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].findAll("td")[0].findAll("svg").length, 0);
+  assert.equal(rows[0].findAll("td")[1].byClass("sample-subject__mark")[0].attributes["aria-label"], "Observation subject: Flower");
+  assert.equal(rows[1].findAll("td")[1].textContent, "—");
+
+  const subject = detailRoot.byClass("collectors__filters")[0].findAll("select")[1];
+  subject.value = "value:flower";
+  subject.listeners.change();
+  assert.deepEqual(list.findAll("tbody")[0].findAll("tr").map(row => row.findAll("a")[0].href), ["#sample/1"]);
+  detailRoot.byClass("collectors__tab--cards")[0].click();
+  assert.deepEqual(detailRoot.byClass("collectors__sample-link").map(link => link.href), ["#sample/1"]);
+  subject.value = "missing:";
+  subject.listeners.change();
+  assert.deepEqual(detailRoot.byClass("collectors__sample-link").map(link => link.href), ["#sample/2"]);
 });
 
 test("rejects mismatched, duplicate, and unpublished Field_Data without rendering attributions", () => {

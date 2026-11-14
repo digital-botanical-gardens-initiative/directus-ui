@@ -4,3 +4,4 @@ site/
 .env
 .env.*
 .vscode/
+data/refresh.json

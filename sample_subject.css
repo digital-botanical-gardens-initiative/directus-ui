@@ -1,0 +1,9 @@
+.sample-subject { display: inline-flex; align-items: center; gap: .65rem; width: fit-content; max-width: 100%; padding: .55rem .8rem; margin: .3rem 0 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--soft); color: var(--green); }
+.sample-subject[hidden] { display: none; }
+.sample-subject svg { width: 1.75rem; height: 1.75rem; flex: none; }
+.sample-subject span { display: flex; flex-direction: column; min-width: 0; }
+.sample-subject__label { font-size: .73rem; color: var(--muted); line-height: 1.25; }
+.sample-subject strong { color: var(--text); font-size: .96rem; overflow-wrap: anywhere; }
+.sample-subject__mark { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; margin-right: .36rem; vertical-align: -.3rem; border-radius: .4rem; background: #eeeaff; color: #4b28d8; }
+.sample-subject__mark svg { width: 1.15rem; height: 1.15rem; flex: none; }
+td.sample-subject__cell { min-width: 7rem; overflow-wrap: anywhere; }

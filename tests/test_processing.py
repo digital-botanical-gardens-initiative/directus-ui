@@ -138,7 +138,7 @@ class ProcessingTests(unittest.TestCase):
             samples = Path(directory) / "samples.json"
             output = Path(directory) / "processing.json"
             samples.write_text(json.dumps({"columns": SAMPLE_COLUMNS, "rows": [
-                [key, value[0], None, None, None, None, None, value[1], None]
+                [key, value[0], None, None, None, None, None, value[1], None, None]
                 for key, value in self.published.items()]}), encoding="utf-8")
             calls = []
 

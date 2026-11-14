@@ -21,11 +21,12 @@ else:
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = ROOT / "data" / "samples.json"
 OUT = ROOT / "data" / "inaturalist.json"
-FIELDS = "id,emi_external_id,community_taxon_id,taxon_id,taxon_name,taxon_rank,photo_url,photos,uri"
+FIELDS = "id,emi_external_id,community_taxon_id,taxon_id,taxon_name,taxon_rank,photo_url,photos,uri,comments_count"
 API = "https://api.inaturalist.org/v1"
 COLUMNS = ["sample_id", "field_id", "observation_id", "observer_taxon_id", "observer_name",
            "observer_rank", "community_taxon_id", "community_name", "community_rank",
-           "col_id", "col_name", "col_rank", "status", "reason", "photos"]
+           "col_id", "col_name", "col_rank", "status", "reason", "photos",
+           "comments_count", "comments_source"]
 PHOTO_HOSTS = {"inaturalist-open-data.s3.amazonaws.com", "static.inaturalist.org", "images.inaturalist.org"}
 PHOTO_PATH = re.compile(r"/photos/([1-9][0-9]*)/square\.(?:jpg|jpeg|png)\Z")
 COMPARABLE_RANKS = {"kingdom", "phylum", "class", "order", "family", "genus", "species",
@@ -43,6 +44,22 @@ def positive_id(value, label):
 
 def optional_id(value, label):
     return None if value is None else positive_id(value, label)
+
+def comment_count(value):
+    """Only a nonnegative integral public count establishes comment presence or absence."""
+    return value if type(value) is int and 0 <= value <= 9007199254740991 else None
+
+
+def public_comments(directus, api):
+    """Keep published positive evidence even when a later API lookup reports zero."""
+    imported = comment_count(directus)
+    if isinstance(api, dict):
+        count = comment_count(api.get("comments_count"))
+        if count is not None:
+            if count == 0 and imported is not None and imported > 0:
+                return imported, "Directus Curation_Data"
+            return count, "iNaturalist API"
+    return (imported, "Directus Curation_Data") if imported is not None else (None, None)
 
 
 def photo_id(url):
@@ -130,7 +147,7 @@ def fetch_api_records(kind, ids):
             results = get_api(f"/{kind}/" + ",".join(map(str, batch)))
         except (HTTPError, URLError) as error:
             print(f"External iNaturalist {kind} lookup unavailable ({error}); retaining Directus records without this lookup")
-            break
+            continue
         for item in results:
             if not isinstance(item, dict) or item.get("id") not in batch or item["id"] in records:
                 raise ValueError(f"Malformed or duplicate iNaturalist {kind} response")
@@ -215,17 +232,18 @@ def prepare(source, samples, communities, observation_metadata):
             matched = api_photos.get(photo_id(url))
             photos.append([url, name(matched.get("attribution")) if matched else None,
                            name(matched.get("license_code")) if matched else None])
+        comments_count, comments_source = public_comments(row.get("comments_count"), metadata)
         output.append([sample_id, sample[0], obs_id, observer_id, name(row.get("taxon_name")),
                        rank(row.get("taxon_rank")), community_id, name(community.get("name")) if community else None,
                        rank(community.get("rank")) if community else None,
                        col[1] if col else None, col[2] if col else None, col[4] if col else None,
-                       status, reason, photos])
+                       status, reason, photos, comments_count, comments_source])
     output.sort(key=lambda row: (row[0], row[2]))
     return output, len(linked_samples)
 
 
 def snapshot_columns():
-    return ["directus_id", "sample_id", "project", "recorded_taxon", "longitude", "latitude", "date", "taxon_id", "resolution_status"]
+    return ["directus_id", "sample_id", "project", "recorded_taxon", "longitude", "latitude", "date", "taxon_id", "resolution_status", "observation_subject"]
 
 
 def snapshot_taxon_columns():
@@ -248,9 +266,10 @@ def build():
                                                if row.get("community_taxon_id") is not None])
     # No lookup for a community ID => explicitly unassessable, never substitute the observer's taxon.
     # Only matched iNaturalist photo IDs corroborate attribution; Directus remains the source of image URLs.
-    photo_obs = [row["id"] for row in linked if row.get("photos") not in (None, "", "[]") or row.get("photo_url")]
-    observation_metadata = fetch_api_records("observations", photo_obs)
-    # A deleted/private API observation does not invalidate the Directus image or source URL.
+    # Look up every linked observation, not only those with photos: a newer public comment
+    # count may differ from the Directus import. Failed/missing lookups retain Directus counts.
+    observation_metadata = fetch_api_records("observations", [row["id"] for row in linked])
+    # A deleted/private API observation does not invalidate the Directus image, count or source URL.
     rows, sample_count = prepare(source, samples, communities, observation_metadata)
     if not rows:
         raise ValueError("No Curation_Data observations joined to the existing sample snapshot")
@@ -259,6 +278,7 @@ def build():
                   "observation_id,sample_id,observer_taxon_id,observer_name,observer_rank,photos[*][0]": "Directus Curation_Data",
                   "field_id,col_id,col_name,col_rank": "Directus Field_Data and Taxa via data/samples.json",
                   "community_name,community_rank,photos[*][1],photos[*][2]": "External iNaturalist API lookup, matched by observation and photo ID (never observation source)",
+                  "comments_count,comments_source": "Nonnegative public iNaturalist API observations.comments_count when available, otherwise public Directus Curation_Data.comments_count; a positive imported count is retained if the newer API reports zero. Null means unknown. Comment bodies and Directus comments are never exported.",
                   "join": "Curation_Data.emi_external_id = Field_Data.sample_id",
                   "comparison": "Accepted scientific names at equal comparable rank; different names are only potential disagreements"},
               "sample_generated_at": samples["generated_at"],

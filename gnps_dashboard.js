@@ -1,7 +1,7 @@
 "use strict";
 
-// Profiles are the current Field_Data sample's Directus MS_Data snapshot rows:
-// [ms_id, field_id, instrument_id, status, filename]. A filename is not a sample identifier.
+// Profiles are Directus MS_Data snapshot rows [ms_id, field_id, instrument_id,
+// status, filename]. A filename is not a sample identifier.
 window.GNPSDashboard = (() => {
   const dataset = "MSV000102993";
   const dashboard = "https://dashboard2.gnps2.org/";
@@ -16,9 +16,13 @@ window.GNPSDashboard = (() => {
     return `${filename}.mzML`;
   }
 
-  function dashboardURL(filename, mz) {
-    const usi = `mzspec:${dataset}:${filename}`;
+  // GNPS2 reads newline-separated USIs in `usi` as one group: the first drives
+  // the map/spectrum, while all selected files appear together in XIC and TIC/BPI overlay.
+  // Its legacy hash stores the same group as {usi, usi2}.
+  function dashboardURL(selected, mz) {
+    const usi = selected.map(({filename}) => `mzspec:${dataset}:${filename}`).join("\n");
     const params = new URLSearchParams({usi});
+    if (selected.length > 1) params.set("tic_overlay", "1");
     if (mz) params.set("xicmz", mz);
     params.set("tic_option", "BPI");
     return `${dashboard}?${params}#${encodeURIComponent(JSON.stringify({usi, usi2: ""}))}`;
@@ -32,34 +36,48 @@ window.GNPSDashboard = (() => {
     return node;
   }
 
-  function render(root, {profiles} = {}) {
+  function render(root, {profiles, selectedIds} = {}) {
     // Unload the previous sample's frame before considering any new profiles.
     root.replaceChildren();
     root.hidden = true;
     if (!Array.isArray(profiles)) return;
 
+    // The shared workspace passes explicit MS_Data IDs. Unlike the single-field
+    // chooser, every valid selected record remains selected, even across fields.
+    const shared = Array.isArray(selectedIds);
+    const allowed = shared ? new Set(selectedIds.filter(validId)) : null;
     const files = new Map();
     for (const profile of profiles) {
       if (!Array.isArray(profile) || profile.length !== 5 || !["OK", "published"].includes(profile[3])) continue;
+      if (shared && (!validId(profile[0]) || !validId(profile[1]) || !allowed.has(profile[0]))) continue;
       const filename = mzmlName(profile[4]);
-      if (filename && !files.has(filename)) files.set(filename, {filename, id: profile[0], instrumentId: profile[2]});
+      const key = shared ? profile[0] : filename;
+      if (filename && !files.has(key)) files.set(key, {filename, id: profile[0], instrumentId: profile[2]});
     }
     if (!files.size) return;
     const entries = [...files.values()];
     const panel = element("div", root, null, "gnps-panel");
-    element("h3", panel, "Field sample · GNPS2 LC-MS dashboard");
-    element("p", panel,
-      "Directus MS_Data filenames for this field sample are used to request GNPS2 views of MassIVE dataset MSV000102993. Remote file availability is not verified.");
+    element("h3", panel, shared ? "Selected Directus files · GNPS2 LC-MS dashboard" : "Field sample · GNPS2 LC-MS dashboard");
+    element("p", panel, shared
+      ? "Selected Directus MS_Data filenames are used to request GNPS2 views of MassIVE dataset MSV000102993. Their presence in this GNPS2 dataset is assumed, not verified."
+      : "Directus MS_Data filenames for this field sample are used to request GNPS2 views of MassIVE dataset MSV000102993. Remote file availability is not verified.");
 
-    let selector;
-    if (entries.length > 1) {
-      const chooser = element("div", panel, null, "gnps-chooser");
-      const label = element("label", chooser, "MS profile file");
-      selector = element("select", label);
-      for (const entry of entries) {
-        const option = element("option", selector, entry.filename);
-        option.value = entry.filename;
-      }
+    let checkboxes;
+    let selectedStatus;
+    if (!shared && entries.length > 1) {
+      const chooser = element("fieldset", panel, null, "gnps-chooser");
+      element("legend", chooser, "Select MS profile files to compare");
+      element("p", chooser, "Select at least one file. GNPS2 overlays selected files in the BPI chromatogram and XIC; the map and spectrum show the first selected file.", "gnps-chooser-hint");
+      checkboxes = entries.map((entry, index) => {
+        const label = element("label", chooser);
+        const checkbox = element("input", label);
+        checkbox.type = "checkbox";
+        checkbox.checked = index === 0;
+        label.append(entry.filename);
+        return checkbox;
+      });
+      selectedStatus = element("p", panel, null, "gnps-selection-status");
+      selectedStatus.setAttribute("aria-live", "polite");
     }
     const provenance = element("p", panel, null, "gnps-provenance");
     const launch = element("p", panel, null, "gnps-source");
@@ -92,16 +110,24 @@ window.GNPSDashboard = (() => {
     failure.hidden = true;
 
     let currentFrame;
-    function show(entry) {
-      const url = dashboardURL(entry.filename, selectedMz);
-      provenance.textContent = `Source: Directus MS_Data${validId(entry.id) ? ` #${entry.id}` : ""}` +
+    function show() {
+      const selected = checkboxes ? entries.filter((_, index) => checkboxes[index].checked) : entries;
+      const url = dashboardURL(selected, selectedMz);
+      const describe = (entry) => `Directus MS_Data${validId(entry.id) ? ` #${entry.id}` : ""}` +
         `${validId(entry.instrumentId) ? ` · Instrument #${entry.instrumentId}` : ""} · ${entry.filename}`;
+      provenance.textContent = `${selected.length > 1 ? "Selected files" : "Source"}: ${selected.map(describe).join("; ")}`;
+      if (selectedStatus) selectedStatus.textContent = selected.length > 1
+        ? `Comparing ${selected.length} selected files: ${selected.map(({filename}) => filename).join(", ")}. Map and spectrum: ${selected[0].filename}.`
+        : `Showing ${selected[0].filename} alone.`;
+      link.textContent = selected.length > 1 ? "Open selected files in GNPS2 ↗" : "Open selected file in GNPS2 ↗";
       link.href = url;
       failure.hidden = true;
       if (!preview.open) return;
       if (currentFrame?.src === url && embed.contains(currentFrame)) return;
       const frame = document.createElement("iframe");
-      frame.title = `GNPS2 LC-MS dashboard for ${entry.filename}`;
+      frame.title = selected.length > 1
+        ? `GNPS2 LC-MS dashboard comparing ${selected.map(({filename}) => filename).join(", ")}`
+        : `GNPS2 LC-MS dashboard for ${selected[0].filename}`;
       frame.loading = "lazy";
       frame.referrerPolicy = "no-referrer";
       frame.src = url;
@@ -126,17 +152,20 @@ window.GNPSDashboard = (() => {
       massError.hidden = true;
       selectedMz = mz;
       preview.open = true;
-      const entry = selector ? files.get(selector.value) : entries[0];
-      if (entry) show(entry);
+      show();
     });
-    if (selector) selector.addEventListener("change", () => {
-      const entry = files.get(selector.value);
-      if (entry) show(entry);
-    });
+    if (checkboxes) {
+      for (const checkbox of checkboxes) checkbox.addEventListener("change", () => {
+        if (!checkboxes.some((item) => item.checked)) {
+          checkbox.checked = true;
+          return;
+        }
+        show();
+      });
+    }
     preview.addEventListener("toggle", () => {
       if (preview.open) {
-        const entry = selector ? files.get(selector.value) : entries[0];
-        if (entry) show(entry);
+        show();
       } else {
         embed.replaceChildren();
         currentFrame = undefined;
@@ -144,9 +173,9 @@ window.GNPSDashboard = (() => {
       }
     });
     preview.open = true;
-    show(entries[0]);
+    show();
     root.hidden = false;
   }
 
-  return Object.freeze({render});
+  return Object.freeze({render, mzmlName});
 })();

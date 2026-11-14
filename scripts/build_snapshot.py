@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_BASE = "https://emi-collection.unifr.ch/directus"
 OUT = Path(__file__).resolve().parents[1] / "data" / "samples.json"
-FIELD_FIELDS = "id,sample_id,qfield_project,taxon_name_unified,taxon_name,sample_name,geometry,date,taxon_ref,taxon_col_id,taxon_resolution_status"
+FIELD_FIELDS = "id,sample_id,qfield_project,taxon_name_unified,taxon_name,sample_name,geometry,date,taxon_ref,taxon_col_id,taxon_resolution_status,observation_subject"
 TAXON_FIELDS = "id,col_id,scientific_name,authorship,rank,parent_ref,backbone_version"
 PAGE_SIZE = 500
 
@@ -94,9 +94,13 @@ def public_row(row):
     project = row.get("qfield_project")
     date = row.get("date")
     status = row.get("taxon_resolution_status")
+    subject = row.get("observation_subject")
+    if subject is not None and not isinstance(subject, str):
+        raise ValueError(f"Invalid observation_subject on Field_Data {row['id']}")
+    subject = subject.strip() if subject is not None else None
     return [row["id"], sample_id.strip(), project.strip() if isinstance(project, str) else None,
             recorded, *coordinates, date if isinstance(date, str) else None, taxon_id,
-            status if isinstance(status, str) else None]
+            status if isinstance(status, str) else None, subject or None]
 
 
 def public_taxon(row):
@@ -146,7 +150,7 @@ def build(env_file=None):
     rows = [item for row in field_rows if (item := public_row(row)) is not None]
     result = {"source": base, "generated_at": datetime.now(timezone.utc).isoformat(),
               "total_rows": len(field_rows),
-              "columns": ["directus_id", "sample_id", "project", "recorded_taxon", "longitude", "latitude", "date", "taxon_id", "resolution_status"],
+              "columns": ["directus_id", "sample_id", "project", "recorded_taxon", "longitude", "latitude", "date", "taxon_id", "resolution_status", "observation_subject"],
               "taxon_columns": ["id", "col_id", "scientific_name", "authorship", "rank", "parent_id", "backbone_version"],
               "taxa": taxa_rows, "rows": rows}
     OUT.parent.mkdir(parents=True, exist_ok=True)

@@ -23,7 +23,7 @@ FIELDS = {
     "Instruments": "id,instrument_id,instrument_model.id,instrument_model.instrument_model",
 }
 SAMPLE_COLUMNS = ["directus_id", "sample_id", "project", "recorded_taxon", "longitude",
-                  "latitude", "date", "taxon_id", "resolution_status"]
+                  "latitude", "date", "taxon_id", "resolution_status", "observation_subject"]
 
 
 def published_samples(path):

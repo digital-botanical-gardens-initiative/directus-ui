@@ -2,9 +2,12 @@
 .gnps-panel{min-width:0;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:.9rem;background:var(--soft)}
 .gnps-panel h3{margin:0 0 .4rem;color:var(--green)}
 .gnps-panel p{margin:.35rem 0 .8rem}
-.gnps-chooser{margin:.75rem 0}
-.gnps-chooser label{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-weight:600}
-.gnps-chooser select{max-width:100%;min-width:0;padding:.4rem;border:1px solid var(--line);border-radius:.4rem;background:white;color:inherit;font:inherit}
+.gnps-chooser{margin:.75rem 0;padding:.65rem .8rem;border:1px solid var(--line);border-radius:.5rem;min-width:0}
+.gnps-chooser legend{font-weight:650}
+.gnps-chooser label{display:flex;align-items:baseline;gap:.5rem;overflow-wrap:anywhere;margin:.4rem 0;cursor:pointer}
+.gnps-chooser input{flex:none;accent-color:var(--green)}
+.gnps-panel .gnps-chooser-hint{font-size:.85rem;color:var(--muted)}
+.gnps-panel .gnps-selection-status{margin:.4rem 0;overflow-wrap:anywhere;font-size:.9rem}
 .gnps-provenance{overflow-wrap:anywhere;font-size:.9rem;color:var(--muted)}
 .gnps-preview{margin-top:.8rem;border-top:1px solid var(--line);padding-top:.65rem}
 .gnps-preview summary{cursor:pointer;color:var(--green);font-weight:650}

@@ -127,8 +127,8 @@ class MSProfileTests(unittest.TestCase):
                     build(output=output, samples=samples)
             self.assertEqual(output.read_text(encoding="utf-8"), "unchanged")
             samples.write_text(json.dumps({"columns": SAMPLE_COLUMNS, "rows": [
-                [1, "field_1", None, None, None, None, None, 101, None],
-                [2, "field_2", None, None, None, None, None, 202, None],
+                [1, "field_1", None, None, None, None, None, 101, None, "Leaf"],
+                [2, "field_2", None, None, None, None, None, 202, None, None],
             ]}), encoding="utf-8")
             self.assertEqual(published_samples(samples), self.published)
             rows = copy.deepcopy(self.records)
@@ -144,7 +144,7 @@ class MSProfileTests(unittest.TestCase):
             samples = Path(directory) / "samples.json"
             output = Path(directory) / "profile.json"
             samples.write_text(json.dumps({"columns": SAMPLE_COLUMNS, "rows": [
-                [key, value[0], None, None, None, None, None, value[1], None]
+                [key, value[0], None, None, None, None, None, value[1], None, "Flower"]
                 for key, value in self.published.items()]}), encoding="utf-8")
             calls = []
             def fake_get_data(collection, params, base, token):

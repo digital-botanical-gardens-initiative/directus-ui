@@ -1,0 +1,7 @@
+.refresh-status{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.15rem 1.25rem;margin:0 0 1.5rem;padding:.65rem .9rem;border:1px solid var(--line);border-left:3px solid var(--sage);border-radius:.45rem;background:var(--soft);font-size:.86rem}
+.refresh-status[hidden]{display:none}
+.refresh-status p{margin:0}
+.refresh-status__latest{color:var(--text)}
+.refresh-status__schedule{color:var(--muted)}
+.refresh-status time{font-variant-numeric:tabular-nums}
+.refresh-status a{white-space:nowrap}

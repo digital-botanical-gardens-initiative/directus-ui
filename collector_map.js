@@ -35,10 +35,13 @@
     function openSample(marker, observation, displaced) {
       const {row, taxon} = observation;
       const popup = node("div", "", null);
-      const species = node("a", "", popup);
-      renderScientificTaxon(species, taxon);
-      species.href = taxonHref(taxon);
+      if (taxon) {
+        const species = node("a", "", popup);
+        renderScientificTaxon(species, taxon);
+        species.href = taxonHref(taxon);
+      } else node("p", `Recorded field name (no resolved species): ${row[3] || "not recorded"}`, popup);
       const sample = node("p", "", popup);
+      window.DBGIObservationSubject.inline(sample, row[9]);
       const sampleLink = node("a", row[1], sample);
       sampleLink.href = `#sample/${row[0]}`;
       node("p", `${row[5]}, ${row[4]} (recorded latitude, longitude)`, popup);
@@ -77,7 +80,7 @@
             L.polyline([origin, display], {color: "#3e503c", weight: 1, opacity: 0.4, interactive: false}).addTo(layer);
             const marker = L.marker(display, {
               icon: L.divIcon({className: "sample-point", iconSize: [8, 8]}),
-              title: `${observation.row[1]} · ${observation.taxon[2]}`,
+              title: `${observation.row[1]} · ${observation.taxon?.[2] || observation.row[3] || "no resolved species"}`,
             }).addTo(layer);
             marker.on("click", () => openSample(marker, observation, true));
           });
@@ -90,7 +93,7 @@
         const marker = L.marker(location, {
           icon: count > 1 && !precise ? L.divIcon({className: "sample-cluster", html: `<span>${count}</span>`, iconSize: [size, size]}) :
             L.divIcon({className: "sample-point", iconSize: [8, 8]}),
-          title: count === 1 ? `${first.row[1]} · ${first.taxon[2]}` : `${number.format(count)} ${scopeLabel} samples`,
+          title: count === 1 ? `${first.row[1]} · ${first.taxon?.[2] || first.row[3] || "no resolved species"}` : `${number.format(count)} ${scopeLabel} samples`,
         }).addTo(layer);
         marker.on("click", () => {
           if (count > 1 && !precise) {
