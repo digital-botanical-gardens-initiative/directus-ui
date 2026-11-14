@@ -1,0 +1,14 @@
+#species-chemcalc:not([hidden]),#sample-chemcalc:not([hidden]){margin-top:1.5rem}
+.chemcalc-panel{min-width:0;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:.9rem;background:var(--soft)}
+.chemcalc-panel h3{margin:0 0 .4rem;color:var(--green)}
+.chemcalc-panel p{margin:.35rem 0 .8rem}
+.chemcalc-form{display:flex;flex-wrap:wrap;align-items:end;gap:.65rem 1rem;margin:.9rem 0}
+.chemcalc-form label{display:grid;gap:.3rem;min-width:min(100%,11rem);font-size:.9rem;font-weight:650}
+.chemcalc-form label:first-child{flex:1 1 15rem}
+.chemcalc-form input{width:100%;min-width:0;padding:.48rem .65rem;border:1px solid var(--line);border-radius:.45rem;background:white;color:var(--text)}
+.chemcalc-form button{padding:.53rem .85rem;border:0;border-radius:.5rem;background:var(--green);color:white;font-weight:650}
+.chemcalc-form button:hover{background:#293c2b}
+.chemcalc-result[hidden]{display:none}
+.chemcalc-result iframe{display:block;width:100%;height:clamp(28rem,70vh,42rem);border:1px solid var(--line);border-radius:.5rem;background:white}
+.chemcalc-panel .chemcalc-note{margin:.55rem 0 0;font-size:.85rem;color:var(--muted)}
+.chemcalc-result p{margin:.55rem 0 0}

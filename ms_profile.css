@@ -1,0 +1,10 @@
+.sample-identity #sample-ms{margin-top:1rem;padding:1rem 1.15rem;border:1px solid var(--line);border-radius:.8rem;background:var(--soft)}
+.ms-profile{font-size:.84rem;line-height:1.5;color:var(--muted,#516361)}
+.ms-profile p{margin:0}
+.ms-profile .ms-profile-status{color:inherit}
+.ms-profile-badge{display:inline-block;padding:.13rem .55rem;border-radius:999px;border:1px solid #a8b8b4;background:#f1f5f3;color:#354941;font-weight:700}
+.ms-profile-badge--recorded{border-color:#71a78a;background:#e4f3e8;color:#174c32}
+.ms-profile-scope{margin-left:.2rem}
+.ms-profile .ms-profile-count,.ms-profile .ms-profile-instruments,.ms-profile .ms-profile-sample{margin-top:.25rem}
+.ms-profile a{text-decoration:underline;text-underline-offset:.15em;overflow-wrap:anywhere}
+.ms-profile a:focus-visible{outline:2px solid currentColor;outline-offset:2px}

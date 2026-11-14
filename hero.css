@@ -1,0 +1,66 @@
+/* Homepage imagery: local DBGI photographs, with content always above a fixed contrast overlay. */
+.top .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  color: var(--green);
+}
+.top .brand img {
+  display: block;
+  width: auto;
+  height: 2.125rem;
+  flex: none;
+}
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #14291b;
+  color: #fff;
+}
+.hero-scenes,
+.hero-scene {
+  position: absolute;
+  inset: 0;
+}
+.hero-scenes { pointer-events: none; }
+.hero-scene {
+  background-repeat: no-repeat;
+  background-size: cover;
+  animation: hero-banner-drift 48s ease-in-out infinite alternate;
+}
+.hero-scene--metasequoia {
+  background-image: url("assets/dbgi-metasequoia.webp");
+  background-position: center 46%;
+}
+@keyframes hero-banner-drift {
+  from { transform: scale(1.025) translate3d(0, 0, 0); }
+  to { transform: scale(1.1) translate3d(-1.5%, .75%, 0); }
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgb(14 32 21 / 88%) 0%, rgb(14 32 21 / 78%) 52%, rgb(14 32 21 / 56%) 100%);
+}
+.hero .hero-inner {
+  position: relative;
+  z-index: 2;
+}
+.hero .eyebrow { color: #e3eecb; }
+.hero h1 { color: #fff; }
+.hero p:not(.eyebrow) { color: #f4f6ef; }
+.hero-search input { color: var(--text); }
+
+@media (max-width: 43rem) {
+  .hero::after { background: rgb(14 32 21 / 82%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-scene { animation: none; transform: none; }
+}
+@media print {
+  .hero-scene { animation: none; transform: none; }
+}

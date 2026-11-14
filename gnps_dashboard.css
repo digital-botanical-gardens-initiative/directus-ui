@@ -1,0 +1,25 @@
+#sample-gnps:not([hidden]){margin-top:1.5rem}
+.gnps-panel{min-width:0;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:.9rem;background:var(--soft)}
+.gnps-panel h3{margin:0 0 .4rem;color:var(--green)}
+.gnps-panel p{margin:.35rem 0 .8rem}
+.gnps-chooser{margin:.75rem 0}
+.gnps-chooser label{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-weight:600}
+.gnps-chooser select{max-width:100%;min-width:0;padding:.4rem;border:1px solid var(--line);border-radius:.4rem;background:white;color:inherit;font:inherit}
+.gnps-provenance{overflow-wrap:anywhere;font-size:.9rem;color:var(--muted)}
+.gnps-preview{margin-top:.8rem;border-top:1px solid var(--line);padding-top:.65rem}
+.gnps-preview summary{cursor:pointer;color:var(--green);font-weight:650}
+.gnps-embed{margin-top:.7rem;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:.5rem;background:white}
+.gnps-embed iframe{display:block;width:100%;min-width:54rem;height:clamp(32rem,72vh,48rem);border:0}
+.gnps-panel .gnps-source{margin:.75rem 0 0;font-size:.9rem;color:var(--muted)}
+.gnps-source a{display:inline-block;padding:.48rem .8rem;border-radius:.5rem;background:var(--green);color:white;font-weight:650;text-decoration:none}
+.gnps-source a:hover{background:#293c2b}
+.gnps-panel .gnps-failure:not([hidden]){margin:.75rem 0 0;padding-left:.75rem;border-left:3px solid var(--line);color:var(--muted)}
+.gnps-scroll-hint{display:none}
+@media(max-width:60rem){.gnps-embed{overscroll-behavior-inline:contain}.gnps-panel .gnps-scroll-hint{display:block;font-size:.85rem;color:var(--muted);margin:.4rem 0 0}}
+.gnps-mass-form{display:flex;flex-wrap:wrap;align-items:end;gap:.55rem .8rem;margin:.9rem 0 .3rem}
+.gnps-mass-form label{display:grid;gap:.3rem;font-size:.9rem;font-weight:650}
+.gnps-mass-form input{width:min(100%,15rem);min-width:0;padding:.48rem .65rem;border:1px solid var(--line);border-radius:.45rem;background:white;color:var(--text)}
+.gnps-mass-form button{padding:.53rem .85rem;border:0;border-radius:.5rem;background:var(--green);color:white;font-weight:650}
+.gnps-mass-form button:hover{background:#293c2b}
+.gnps-panel .gnps-mass-hint{font-size:.85rem;color:var(--muted)}
+.gnps-panel .gnps-mass-error:not([hidden]){margin:.5rem 0;color:#8f2525;font-weight:650}

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore DBGI samples collected in Directus, by project and taxon.">
+  <title>DBGI · Sample explorer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="hero.css?v=2">
+  <link rel="stylesheet" href="garden_progress.css">
+  <link rel="stylesheet" href="garden_badges.css">
+  <link rel="stylesheet" href="sample_weather.css">
+  <link rel="stylesheet" href="inaturalist.css">
+  <link rel="stylesheet" href="metabolome.css?v=2">
+  <link rel="stylesheet" href="chemcalc.css">
+  <link rel="stylesheet" href="ms_profile.css">
+  <link rel="stylesheet" href="gnps_dashboard.css?v=2">
+  <link rel="stylesheet" href="species.css">
+  <link rel="stylesheet" href="collectors.css">
+  <link rel="stylesheet" href="processing.css">
+  <script src="garden_progress.js" defer></script>
+  <script src="garden_badges.js" defer></script>
+  <script src="sample_weather.js" defer></script>
+  <script src="scientific_names.js" defer></script>
+  <script src="inaturalist.js" defer></script>
+  <script src="metabolome.js?v=2" defer></script>
+  <script src="chemcalc.js" defer></script>
+  <script src="ms_profile.js" defer></script>
+  <script src="gnps_dashboard.js?v=2" defer></script>
+  <script src="processing.js" defer></script>
+  <script src="collector_map.js" defer></script>
+  <script src="collectors.js" defer></script>
+  <script src="app.js?v=2" defer></script>
+</head>
+<body>
+  <header class="top"><div class="wrap header-inner"><a class="brand" href="#home"><img src="assets/dbgi-portal-logo.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a><nav aria-label="Main navigation"><a href="#home">Overview</a><a href="#samples">Samples</a><a href="#explore">Explore</a><a href="#collectors">Collectors</a><a href="#treemap">Treemap</a><a href="#inaturalist">iNaturalist review</a></nav><a href="https://www.dbgi.org/" target="_blank" rel="noopener noreferrer">About DBGI ↗</a></div></header>
+  <main>
+    <section class="hero"><div class="hero-scenes" aria-hidden="true"><span class="hero-scene hero-scene--metasequoia"></span></div><div class="wrap hero-inner"><p class="eyebrow">Digital Botanical Gardens Initiative</p><h1>Explore the living collection.</h1><p>Find a botanical sample, browse projects, and follow its recorded identity and location. A read-only view of Directus field data.</p><form id="hero-search" class="hero-search"><label class="sr-only" for="hero-query">Search samples</label><input id="hero-query" placeholder="Sample ID or taxon, e.g. Lonicera" autocomplete="off"><button type="submit">Search samples →</button></form></div></section>
+    <div class="wrap body-wrap"><p id="status" role="status" aria-live="polite">Loading samples…</p>
+      <section id="home-view" class="view" hidden><div class="section-heading"><div><p class="eyebrow">At a glance</p><h2>From field to collection</h2></div><p class="muted" id="updated"></p></div><div class="metrics" id="metrics"></div><div class="section-heading"><div><p class="eyebrow">Living collections</p><h2>Five botanical gardens</h2></div><a href="#explore">Compare garden records and families →</a></div><div id="featured"></div><div class="note">Taxonomic counts use the linked Catalogue of Life Taxa table; unlinked field records remain unresolved. Garden-stage indicators come from Directus processing records, and observation photos from Directus Curation_Data. Missing data are never treated as proof of completion.</div></section>
+      <section id="samples-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Find a record</p><h2>Samples</h2></div><p class="muted" id="result-count"></p></div>
+        <div class="filters">
+          <label>Sample, field name or resolved name<input id="query" type="search" placeholder="Search ID or taxon" autocomplete="off"></label>
+          <label>Project<select id="project"><option value="">All projects</option></select></label>
+          <label>CoL family<input id="family-query" type="search" list="family-suggestions" placeholder="Type family, e.g. Rubiaceae" autocomplete="off"><datalist id="family-suggestions"></datalist></label>
+          <label class="filter-toggle"><input id="profiled-only" type="checkbox" disabled>Profiled samples only</label>
+          <button id="clear" type="button" class="secondary">Clear filters</button>
+        </div>
+        <p id="profiled-filter-status" class="muted" role="status" aria-live="polite">Checking Directus MS files for the profiled-only filter…</p>
+        <div class="view-switch" role="group" aria-label="Sample display"><button id="view-list" type="button" aria-pressed="true">List</button><button id="view-map" type="button" aria-pressed="false">Map</button></div>
+        <div id="list-panel">
+          <div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Processing evidence</th><th scope="col">Directus</th></tr></thead><tbody id="sample-rows"></tbody></table></div>
+          <p id="empty" class="muted" hidden>No samples match these filters.</p>
+          <div class="pager"><button id="previous" type="button" class="secondary">← Previous</button><span id="page-label"></span><button id="next" type="button" class="secondary">Next →</button></div>
+        </div>
+        <div id="map-panel" hidden><p id="mapped-count" class="muted"></p><div id="samples-map" role="region" aria-label="Map of matching samples"></div><p id="map-status" role="status" aria-live="polite"></p></div>
+      </section>
+      <section id="explore-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Compare collections</p><h2>Garden progress</h2></div></div>
+        <div id="garden-progress-chart" role="region" aria-label="Collected, extracted and profiled field samples by garden"><p role="status">Loading garden progress…</p></div>
+        <div class="section-heading taxonomy-heading"><div><p class="eyebrow">Directus field records</p><h2>Garden groups and other projects</h2></div></div>
+        <p class="muted">The five gardens combine their documented Directus project aliases; other projects remain separate. The original project is retained on each sample page. CoL taxa are distinct resolved Taxa records linked from field observations, regardless of rank.</p>
+        <div class="table-scroll"><table><thead><tr><th scope="col">Garden / project</th><th scope="col" class="number">Samples</th><th scope="col" class="number">Resolved CoL taxa</th><th scope="col" class="number">With coordinates</th></tr></thead><tbody id="project-rows"></tbody></table></div>
+        <div class="section-heading taxonomy-heading"><div><p class="eyebrow">CoL hierarchy</p><h2>Families</h2></div></div>
+        <p class="muted">A sample belongs to a family when its linked Taxa record is that family or has it in its parent lineage. Click a family to list every linked sample, including descendants at genus or species rank.</p>
+        <div class="table-scroll"><table><thead><tr><th scope="col">Family</th><th scope="col" class="number">Samples</th><th scope="col" class="number">Resolved CoL taxa</th><th scope="col">Catalogue of Life</th></tr></thead><tbody id="family-rows"></tbody></table></div>
+        <div class="pager" aria-label="Family table pages"><button id="family-previous" type="button" class="secondary">← Previous families</button><span id="family-page-label" role="status" aria-live="polite"></span><button id="family-next" type="button" class="secondary">Next families →</button></div>
+        <div class="section-heading taxonomy-heading"><div><p class="eyebrow">Resolved identifications</p><h2>Most collected CoL taxa</h2></div></div>
+        <p class="muted">Grouped by Taxa primary key, not spelling of field names or synonyms. Click a taxon to show samples resolved to that exact CoL usage.</p>
+        <div class="table-scroll"><table><thead><tr><th scope="col">Resolved taxon</th><th scope="col">Rank</th><th scope="col">Family</th><th scope="col" class="number">Samples</th><th scope="col">Catalogue of Life</th></tr></thead><tbody id="taxon-rows"></tbody></table></div>
+      </section>
+      <section id="collectors-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Directus · Field_Data and People</p><h2>Collectors</h2></div></div>
+        <div id="collectors-board" aria-label="Collectors ranked by linked field samples"></div>
+      </section>
+      <section id="collector-view" class="view" hidden>
+        <div id="collector-detail" aria-label="Field samples linked to this Directus collector"></div>
+      </section>
+      <section id="inaturalist-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Directus · Curation_Data</p><h2>iNaturalist identification review</h2></div></div>
+        <div id="inaturalist-review" role="region" aria-label="iNaturalist and Catalogue of Life identification comparison"><p role="status">Loading linked observations…</p></div>
+      </section>
+      <section id="treemap-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Catalogue of Life · Taxa</p><h2>Collection treemap</h2></div></div>
+        <p class="muted">Areas represent resolved field samples, grouped by their linked Taxa family, genus and exact identification. Choose all projects or a botanical garden/project; click a rectangle to explore its descendants. Names and ancestry come only from Taxa, never from field-name text.</p>
+        <div class="filters"><label>Botanical garden / project<select id="treemap-project"><option value="">All projects</option></select></label></div>
+        <p id="treemap-summary" role="status" aria-live="polite"></p>
+        <nav id="treemap-path" class="treemap-path" aria-label="Taxonomy path"></nav>
+        <div id="treemap-canvas" class="treemap-canvas" role="group" aria-label="Taxonomic sample treemap"></div>
+        <p class="muted">Only resolved samples appear. Identifications above family rank are grouped under “Without a family in Taxa”; identifications at family or genus rank remain visible at that rank. Hover or focus a small tile for its full name and count.</p>
+        <div id="treemap-detail" class="treemap-detail" aria-live="polite"></div>
+      </section>
+      <section id="species-view" class="view" hidden>
+        <a href="#samples" class="back">← All field samples</a>
+        <div class="section-heading"><div><p class="eyebrow">Resolved species · Directus Taxa</p><h2 id="species-title"></h2><p id="species-summary" class="muted"></p></div><div id="species-ms" aria-live="polite"></div></div>
+        <p class="species-intro">These are distinct field samples identified as this species or one of its descendants in the Taxa hierarchy. Open a field sample to see its separately recorded dried material, extracts, aliquots and MS files; a species-level MS result does not imply that every sample was profiled.</p>
+        <div id="species-cards" class="species-cards"></div>
+        <div class="pager" aria-label="Species field-sample pages"><button id="species-previous" type="button" class="secondary">← Previous</button><span id="species-page-label" role="status" aria-live="polite"></span><button id="species-next" type="button" class="secondary">Next →</button></div>
+        <section id="species-metabolome" aria-label="LOTUS metabolite search for this species" hidden></section>
+        <section id="species-chemcalc" aria-label="ChemCalc formula and adduct calculator"></section>
+      </section>
+      <section id="detail-view" class="view" hidden>
+        <a href="#samples" class="back">← All samples</a>
+        <div class="sample-heading">
+          <div><p class="eyebrow">Field record</p><h2 id="detail-title"></h2><p class="sample-code" id="detail-id"></p><p id="detail-species" hidden></p></div>
+        </div>
+        <div id="sample-overview" class="sample-overview">
+          <div class="sample-identity">
+            <dl id="detail-fields" class="details"></dl>
+            <details id="ancestry" hidden><summary>Catalogue of Life classification</summary><ol id="ancestry-list"></ol></details>
+            <aside id="sample-ms" aria-label="Directus mass-spectrometry profiling for the resolved species" aria-live="polite"></aside>
+          </div>
+          <aside id="sample-inaturalist" aria-label="iNaturalist observations for this sample" hidden></aside>
+        </div>
+        <div id="sample-context" class="sample-context">
+          <div id="location" hidden>
+            <h3>Location</h3><p id="coordinates"></p>
+            <iframe id="sample-map" title="Sample location on OpenStreetMap" loading="lazy" referrerpolicy="no-referrer"></iframe>
+            <p><a id="map-link" target="_blank" rel="noopener noreferrer">View larger map on OpenStreetMap ↗</a></p>
+          </div>
+          <section id="sample-weather" aria-label="Historical weather at sample location"></section>
+        </div>
+        <section id="sample-processing" aria-label="Directus dried samples, extracts, aliquots and associated MS records"></section>
+        <section id="sample-metabolome" aria-label="LOTUS metabolite search for this species" hidden></section>
+        <section id="sample-chemcalc" aria-label="ChemCalc formula and adduct calculator"></section>
+        <section id="sample-gnps" aria-label="GNPS LC-MS dashboard for this field sample" hidden></section>
+      </section>
+    </div>
+  </main>
+  <footer><div class="wrap">DBGI · <a href="https://www.dbgi.org/">dbgi.org</a> · Public, read-only field-data snapshot. <a href="https://github.com/digital-botanical-gardens-initiative/directus-ui">Source and refresh instructions</a></div></footer>
+</body>
+</html>

@@ -1,0 +1,8 @@
+#sample-metabolome:not([hidden]){margin-top:1.5rem}
+.metabolome-panel{min-width:0;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:.9rem;background:var(--soft)}
+.metabolome-panel h3{margin:0 0 .4rem;color:var(--green)}
+.metabolome-panel p{margin:.35rem 0 .8rem}
+.metabolome-embed{max-width:100%;border:1px solid var(--line);border-radius:.5rem;background:white}
+.metabolome-embed iframe{display:block;width:100%;height:clamp(32rem,75vh,46rem);border:0}
+.metabolome-source{font-size:.9rem;color:var(--muted)}
+.metabolome-panel .metabolome-source{margin:.75rem 0 0}

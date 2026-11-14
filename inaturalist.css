@@ -1,0 +1,67 @@
+.inat-figure {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0.65rem 0 0.8rem;
+  border: 1px solid #ced8ce;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: #f4f7f1;
+}
+.inat-figure > a > img {
+  display: block;
+  width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+}
+.inat-figure figcaption {
+  padding: 0.75rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.inat-thumbnails {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding: 0.55rem;
+  border-top: 1px solid #ced8ce;
+}
+.inat-thumb {
+  flex: 0 0 4.2rem;
+  width: 4.2rem;
+  height: 4.2rem;
+  padding: 0.15rem;
+  border: 2px solid transparent;
+  border-radius: 0.4rem;
+  background: #fff;
+  cursor: pointer;
+}
+.inat-thumb[aria-pressed="true"] { border-color: #345135; }
+.inat-thumb:focus-visible { outline: 2px solid #244f78; outline-offset: 2px; }
+.inat-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.inat-image-unavailable { padding: 1rem; }
+.inat-image-unavailable:empty { display: none; }
+.inat-observations { display: grid; gap: 1rem; }
+.inat-observations article { min-width: 0; }
+.inat-observations article + article { padding-top: 1rem; border-top: 1px solid #ced8ce; }
+.inat-observation-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem; margin: 0.4rem 0; font-size: 0.92rem; }
+.inat-status { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 1rem; background: #e5efe6; color: #345135; font-size: 0.76rem; }
+.inat-potential-disagreement { background: #fff0e5; color: #914c20; }
+.inat-unassessable { background: #eaedf2; color: #5b6372; }
+.inat-compare { display: grid; grid-template-columns:7rem minmax(0,1fr); gap: 0.35rem 0.65rem; margin: 0.55rem 0; font-size: 0.86rem; }
+.inat-compare dt { color: #526357; }
+.inat-compare dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.inat-recorded { margin: 0.5rem 0; font-size: 0.84rem; }
+.inat-recorded summary { cursor: pointer; color: #465f55; }
+.inat-recorded p, .inat-source { margin: 0.35rem 0; font-size: 0.84rem; }
+.inat-summary { font-weight: 700; }
+.inat-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.inat-controls label { display: grid; gap: 0.35rem; min-width: min(18rem, 100%); }
+.inat-controls input, .inat-controls select { max-width: 100%; padding: 0.45rem; }
+.inat-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.inat-table th, .inat-table td { padding: 0.6rem; border-bottom: 1px solid #d9dfd9; text-align: left; vertical-align: top; }
+.inat-table td:first-child { text-align: center; }
+.inat-table a { white-space: nowrap; }
+@media (max-width: 800px) {
+  .inat-table { display: block; overflow-x: auto; }
+  .inat-table th, .inat-table td { min-width: 8rem; }
+}

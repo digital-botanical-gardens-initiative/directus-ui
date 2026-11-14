@@ -1,0 +1,34 @@
+{
+  "gardens": [
+    {
+      "id": "fribourg",
+      "name": "Botanical Garden of the University of Fribourg",
+      "aliases": ["jbuf", "bg-unifr"],
+      "url": "https://www.dbgi.org/gardens/fribourg/"
+    },
+    {
+      "id": "champex",
+      "name": "Flore-Alpe Garden of Champex",
+      "aliases": ["jbc"],
+      "url": "https://www.dbgi.org/gardens/champex/"
+    },
+    {
+      "id": "neuchatel",
+      "name": "Botanical Garden of the City of Neuchâtel",
+      "aliases": ["jbn", "jbn-new"],
+      "url": "https://www.dbgi.org/gardens/neuchatel/"
+    },
+    {
+      "id": "prague",
+      "name": "Prague Botanical Garden",
+      "aliases": ["jbp", "jbp-new"],
+      "url": "https://www.dbgi.org/gardens/prague/"
+    },
+    {
+      "id": "kew",
+      "name": "Royal Botanic Gardens, Kew",
+      "aliases": ["kew-botanical-gardens"],
+      "url": "https://www.dbgi.org/gardens/kew/"
+    }
+  ]
+}

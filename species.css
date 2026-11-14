@@ -1,0 +1,24 @@
+#species-view .back{margin-bottom:1rem}
+#species-view .section-heading{align-items:start}
+#species-view .section-heading h2{margin:.2rem 0}
+#species-view #species-summary{margin:.45rem 0 0}
+.species-intro{max-width:62rem;color:var(--muted)}
+#species-ms{max-width:25rem;padding:.8rem 1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--soft);font-size:.88rem}
+#species-ms p{margin:.35rem 0 0}
+.species-ms-badge{display:inline-block;color:#246347}
+.species-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:.85rem;align-items:start;margin:1.4rem 0}
+.species-card{min-width:0;border:1px solid var(--line);border-radius:.75rem;background:var(--soft);padding:1rem 1.15rem;overflow-wrap:anywhere}
+.species-card h3{margin:0 0 .4rem;font-size:1.1rem}
+.species-card p{margin:.35rem 0;font-size:.9rem}
+.species-card .species-stages{font-weight:650;color:var(--green)}
+.species-card>a:last-child{display:inline-block;margin-top:.5rem;font-size:.84rem}
+#species-metabolome:not([hidden]){margin-top:2rem}
+#detail-species{margin:.35rem 0 0;font-size:.9rem}
+#sample-processing{margin-top:1.5rem;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:.85rem;background:var(--soft)}
+.stage-badges{display:flex;flex-wrap:wrap;gap:.3rem;min-width:12rem}
+.stage-badge{display:inline-flex;align-items:center;border:1px solid transparent;border-radius:1rem;padding:.1rem .48rem;font-size:.72rem;font-weight:650;white-space:nowrap}
+.stage-badge--field{color:#385741;background:#edf2e8;border-color:#d2decf}
+.stage-badge--extract{color:#75531c;background:#fbefdb;border-color:#edddbc}
+.stage-badge--ms{color:#225a43;background:#dff2e6;border-color:#c4e2ce}
+.stage-badge--unknown{color:var(--muted);background:#f4f3f0;border-color:var(--line)}
+@media(max-width:43rem){#species-ms{max-width:none;width:100%}}

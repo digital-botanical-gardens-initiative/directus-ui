@@ -1,0 +1,94 @@
+.garden-badges {
+  margin-block: 1.5rem;
+}
+
+.garden-badges__intro {
+  margin: 0 0 1rem;
+  color: #38534c;
+}
+
+.garden-badges__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.garden-badges__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid #b4cdc0;
+  border-radius: 0.65rem;
+  background: #f6faf6;
+  color: #173b30;
+}
+
+.garden-badges__card:has(.garden-badges__select[aria-pressed="true"]) {
+  border-color: #267355;
+  box-shadow: inset 0 0 0 1px #267355;
+}
+
+.garden-badges__select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.garden-badges__select::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.garden-badges__logo {
+  width: 100%;
+  height: 8rem;
+  padding: 0.75rem;
+  border-radius: 0.45rem;
+  background: white;
+  object-fit: contain;
+}
+.garden-badges__title {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.garden-badges__select:hover,
+.garden-badges__link:hover {
+  text-decoration: underline;
+}
+
+.garden-badges__select:focus-visible,
+.garden-badges__link:focus-visible {
+  outline: 3px solid #267355;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.garden-badges__count {
+  font-variant-numeric: tabular-nums;
+  color: #38534c;
+}
+
+.garden-badges__link {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  color: #185b46;
+  font-size: 0.9rem;
+  text-underline-offset: 0.15em;
+}

@@ -1,0 +1,36 @@
+.sample-weather {
+  margin-block: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid #cbd9cf;
+  border-radius: 0.9rem;
+  background: #f5f9f6;
+  color: #19392f;
+}
+
+.sample-weather h3 { margin: 0 0 0.6rem; }
+.sample-weather p { margin-block: 0.4rem; }
+.sample-weather__status { font-weight: 600; }
+.sample-weather__status:empty { display: none; }
+.sample-weather__button { margin-block: 0.5rem; }
+.sample-weather__details { margin-block: 0.45rem 0; color: #465f55; font-size: 0.875rem; line-height: 1.5; }
+.sample-weather__details summary { cursor: pointer; width: fit-content; }
+.sample-weather__details p { max-width: 70ch; }
+.sample-weather__credit,
+.sample-weather__time { font-size: 0.8rem; line-height: 1.45; color: #465f55; }
+.sample-weather__credit a { color: #185e51; }
+.sample-weather__result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 2rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.7rem;
+  background: #e9f2ec;
+}
+.sample-weather__condition { display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem; }
+.sample-weather__icon { width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; fill: currentColor; }
+.sample-weather__measures { display: flex; flex-wrap: wrap; gap: 0.75rem 1.6rem; margin: 0; }
+.sample-weather__measures > div { min-width: 8rem; }
+.sample-weather__measures dt { color: #465f55; font-size: 0.8rem; }
+.sample-weather__measures dd { margin: 0.1rem 0 0; font-size: 1.15rem; font-weight: 700; }
+.sample-weather__time { flex-basis: 100%; margin: 0.15rem 0 0 !important; }

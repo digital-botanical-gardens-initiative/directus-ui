@@ -1,0 +1,61 @@
+.garden-progress {
+  --progress-ms: #265b42;
+  --progress-extracted: #869778;
+  --progress-collected: #d9ceb3;
+  color: inherit;
+}
+
+.garden-progress__intro,
+.garden-progress__source {
+  line-height: 1.5;
+}
+
+.garden-progress__source {
+  font-size: .85rem;
+  overflow-wrap: anywhere;
+}
+
+.garden-progress__method { font-size: .85rem; color: #566052; }
+.garden-progress__method summary { cursor: pointer; width: fit-content; }
+.garden-progress__method p { max-width: 85ch; line-height: 1.5; }
+
+.garden-progress__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+.garden-progress__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.garden-progress__swatch {
+  display: inline-block;
+  width: .9rem;
+  height: .9rem;
+}
+
+.garden-progress__legend .garden-progress__ms_record_present .garden-progress__swatch { background: var(--progress-ms); }
+.garden-progress__legend .garden-progress__extraction_record_present .garden-progress__swatch { background: var(--progress-extracted); }
+.garden-progress__legend .garden-progress__collected_only .garden-progress__swatch { background: var(--progress-collected); }
+.garden-progress__scroll { overflow-x: auto; }
+.garden-progress__table { border-collapse: collapse; width: 100%; min-width: 55rem; }
+.garden-progress__table caption { text-align: left; padding: .5rem 0; }
+.garden-progress__table th,
+.garden-progress__table td {
+  padding: .65rem .55rem;
+  border-bottom: 1px solid #d7d9d3;
+  text-align: left;
+  vertical-align: middle;
+}
+.garden-progress__table th:nth-child(2) { min-width: 12rem; width: 38%; }
+.garden-progress__table .garden-progress__number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.garden-progress__bar { display: flex; width: 100%; height: 1.3rem; background: #f2f1eb; border-radius: .35rem; overflow: hidden; }
+.garden-progress__segment { display: block; height: 100%; flex: none; }
+.garden-progress__bar .garden-progress__ms_record_present { background: var(--progress-ms); }
+.garden-progress__bar .garden-progress__extraction_record_present { background: var(--progress-extracted); }
+.garden-progress__bar .garden-progress__collected_only { background: var(--progress-collected); }

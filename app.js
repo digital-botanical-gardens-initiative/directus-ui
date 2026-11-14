@@ -1,0 +1,1280 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const format = (n) => new Intl.NumberFormat("en").format(n);
+const PAGE_SIZE = 40;
+const FAMILY_PAGE_SIZE = 20;
+const PRECISE_MAP_ZOOM = 19;
+const TREEMAP_COLORS = [
+  ["#0072B2", "#fff"], ["#E69F00", "#111"], ["#009E73", "#111"], ["#CC79A7", "#111"],
+  ["#D55E00", "#111"], ["#56B4E9", "#111"], ["#332F56", "#fff"], ["#F0E442", "#111"],
+];
+let rows = [];
+let projects = [];
+let gardenCatalog;
+let gardenSummaries = [];
+const gardenByProject = new Map();
+const gardenById = new Map();
+let families = [];
+let filtered = [];
+let page = 0;
+let selectedTaxonId = null;
+const byId = new Map();
+let familyPage = 0;
+const taxaById = new Map();
+const speciesByTaxon = new Map();
+const speciesRows = new Map();
+let speciesPage = 0;
+let selectedSpeciesId = null;
+const familyByTaxon = new Map();
+let directusBase = "";
+let sampleSnapshot;
+let inaturalistData;
+let inaturalistError = "";
+let inaturalistPromise;
+let wikidataTaxa;
+let wikidataPromise;
+let msProfileIndex;
+let msProfilePromise;
+let msProfileError = "";
+let processingIndex;
+let processingPromise;
+let processingError = "";
+let sampleView = "list";
+let leafletPromise;
+let samplesMap;
+let markerLayer;
+let mapSelection = null;
+let treemapRoot;
+let treemapCurrent;
+let treemapSelected = null;
+let selectedTreemapTaxa = null;
+let collectorsView;
+let collectorsPromise;
+
+function element(tag, text, parent, className) {
+  const node = document.createElement(tag);
+  node.textContent = text ?? "";
+  if (className) node.className = className;
+  if (parent) parent.append(node);
+  return node;
+}
+
+function projectName(value) { return value || "Unassigned"; }
+function projectMatches(project, scope) {
+  if (!scope) return true;
+  if (scope.startsWith("g:")) return gardenByProject.get(project)?.id === scope.slice(2);
+  return (project || "") === scope.slice(2);
+}
+function scopeName(scope) {
+  return scope.startsWith("g:") ? gardenById.get(scope.slice(2))?.name || "Unknown garden" :
+    projectName(scope.slice(2));
+}
+function resolvedName(taxon) { return taxon ? [taxon[2], taxon[3]].filter(Boolean).join(" ") : "Unresolved"; }
+function scientificTaxon(parent, taxon) {
+  window.DBGIScientificNames.append(parent, taxon?.[2], taxon?.[4], taxon?.[3]);
+}
+function catalogueLink(parent, taxon, label = "Catalogue of Life ↗") {
+  const id = taxon?.[1];
+  if (typeof id !== "string" || !/^[A-Za-z0-9]+$/.test(id)) return null;
+  const link = element("a", label, parent);
+  link.href = `https://www.catalogueoflife.org/data/taxon/${id}`;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `Open ${taxon[2]} on Catalogue of Life`);
+  return link;
+}
+function lineage(id) {
+  const path = [];
+  const seen = new Set();
+  while (id != null) {
+    if (seen.has(id) || !taxaById.has(id)) throw new Error("Incomplete Taxa ancestry in snapshot");
+    seen.add(id);
+    const taxon = taxaById.get(id);
+    path.push(taxon);
+    id = taxon[5];
+  }
+  return path.reverse();
+}
+function familyOf(id) {
+  if (id == null) return null;
+  if (!familyByTaxon.has(id)) familyByTaxon.set(id, lineage(id).find((taxon) => taxon[4] === "family") || null);
+  return familyByTaxon.get(id);
+}
+function speciesOf(id) {
+  if (id == null) return null;
+  if (!speciesByTaxon.has(id)) speciesByTaxon.set(id, lineage(id).find((taxon) => taxon[4] === "species") || null);
+  return speciesByTaxon.get(id);
+}
+
+function directusItemUrl(collection, id) {
+  if (!directusBase || !/^[A-Za-z][A-Za-z0-9_]*$/.test(collection) ||
+      (typeof id !== "string" && !Number.isSafeInteger(id)) || String(id) === "") return "";
+  return `${directusBase}/admin/content/${collection}/${encodeURIComponent(String(id))}`;
+}
+function itemLink(parent, collection, id, label, ariaLabel) {
+  const url = directusItemUrl(collection, id);
+  if (!url) return;
+  const link = element("a", label, parent);
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", ariaLabel);
+}
+function sampleFilterLink(parent, label, {project = "", family = "", map = false} = {}) {
+  const link = element("a", label, parent);
+  link.href = "#samples";
+  link.addEventListener("click", () => {
+    selectedTaxonId = null;
+    selectedTreemapTaxa = null;
+    $("query").value = "";
+    $("project").value = project;
+    $("family-query").value = family;
+    filter();
+    sampleView = map ? "map" : "list";
+  });
+  return link;
+}
+
+
+function show(view) {
+  if (view !== "collector") collectorsView?.hide();
+  if (view !== "detail") {
+    $("sample-map").removeAttribute("src");
+    window.SampleWeather?.clear($("sample-weather"));
+    $("sample-metabolome").replaceChildren();
+    $("sample-metabolome").hidden = true;
+    $("sample-ms").replaceChildren();
+    $("sample-gnps").replaceChildren();
+    $("sample-processing").replaceChildren();
+    $("sample-chemcalc").replaceChildren();
+    $("sample-chemcalc").hidden = true;
+    $("sample-gnps").hidden = true;
+  }
+  if (view !== "species") {
+    $("species-metabolome").replaceChildren();
+    $("species-metabolome").hidden = true;
+    $("species-chemcalc").replaceChildren();
+    $("species-chemcalc").hidden = true;
+  }
+  document.querySelector(".hero").hidden = view !== "home";
+  for (const section of document.querySelectorAll(".view")) section.hidden = section.id !== `${view}-view`;
+  for (const link of document.querySelectorAll("nav a")) {
+    if (link.getAttribute("href") === `#${view}` || (view === "collector" && link.getAttribute("href") === "#collectors")) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  document.title = `${view === "home" ? "Sample explorer" : view[0].toUpperCase() + view.slice(1)} · DBGI`;
+  if (view === "samples" && (msProfileIndex || processingIndex || msProfileError || processingError)) renderPage();
+  if (view === "samples" && sampleView === "map") setSampleView("map");
+  if (view === "treemap" && treemapRoot) renderTreemap();
+  if (view === "inaturalist") renderInaturalistReview();
+  if ((view === "detail" || view === "inaturalist") && !inaturalistPromise) {
+    inaturalistPromise = loadInaturalist();
+  }
+  if ((view === "detail" || view === "species") && !wikidataPromise) wikidataPromise = loadWikidataTaxa();
+  if (["detail", "species", "samples"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
+  if (["detail", "species", "samples"].includes(view) && !processingPromise) processingPromise = loadProcessing();
+}
+
+async function showCollectors(hash) {
+  const detail = hash.startsWith("collector/");
+  const root = $(detail ? "collector-detail" : "collectors-board");
+  root.replaceChildren();
+  element("p", "Loading Directus collectors…", root, "muted");
+  const id = detail ? Number(hash.slice(10)) : null;
+  if (detail && (!Number.isSafeInteger(id) || id <= 0)) {
+    root.replaceChildren();
+    element("p", "Collector not found in this snapshot.", root, "muted");
+    return;
+  }
+  try {
+    if (!collectorsPromise) collectorsPromise = (async () => {
+      const response = await fetch("data/collectors.json");
+      if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+      const snapshot = await response.json();
+      if (snapshot.source !== directusBase || snapshot.sample_snapshot_generated_at !== sampleSnapshot.generated_at) {
+        throw new Error("Collector snapshot does not match the published field-sample snapshot");
+      }
+      collectorsView = window.DBGICollectors.create({
+        leaderboardRoot: $("collectors-board"),
+        detailRoot: $("collector-detail"),
+        snapshot, byId, directusBase, resolveSpecies: speciesOf,
+        renderScientificTaxon: scientificTaxon, loadLeaflet,
+      });
+    })();
+    await collectorsPromise;
+    if (location.hash.slice(1) !== hash) return;
+    if (detail) {
+      if (!collectorsView.detail(id)) {
+        root.replaceChildren();
+        element("p", "Collector not found in this snapshot.", root, "muted");
+      }
+    } else collectorsView.leaderboard();
+  } catch (error) {
+    if (location.hash.slice(1) !== hash) return;
+    root.replaceChildren();
+    element("p", `Collectors unavailable: ${error.message}`, root, "muted");
+  }
+}
+
+function route() {
+  const hash = location.hash.slice(1);
+  if (hash.startsWith("sample/")) {
+    const id = Number(hash.slice(7));
+    const row = Number.isSafeInteger(id) ? byId.get(id) : undefined;
+    if (row) {
+      $("status").textContent = "";
+      detail(row);
+      show("detail");
+      setTimeout(() => scrollTo(0, 0), 0);
+      return;
+    }
+    $("status").textContent = "Sample not found in this snapshot.";
+    show("samples");
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
+  if (hash.startsWith("species/")) {
+    const id = Number(hash.slice(8));
+    const taxon = Number.isSafeInteger(id) ? taxaById.get(id) : undefined;
+    if (taxon?.[4] === "species" && speciesRows.has(id)) {
+      $("status").textContent = "";
+      if (selectedSpeciesId !== id) speciesPage = 0;
+      selectedSpeciesId = id;
+      renderSpecies(taxon);
+      show("species");
+      setTimeout(() => scrollTo(0, 0), 0);
+      return;
+    }
+    $("status").textContent = "Species not found in this snapshot.";
+    show("samples");
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
+  if (hash === "collectors" || hash.startsWith("collector/")) {
+    $("status").textContent = "";
+    show(hash === "collectors" ? "collectors" : "collector");
+    showCollectors(hash);
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
+  $("status").textContent = "";
+  show(["home", "samples", "explore", "treemap", "inaturalist"].includes(hash) ? hash : "home");
+  setTimeout(() => scrollTo(0, 0), 0);
+}
+
+function summary() {
+  const resolved = rows.filter((row) => row[7] != null);
+  const metrics = [["Field samples", rows.length], ["Resolved to CoL", resolved.length],
+                   ["Distinct CoL taxa", new Set(resolved.map((row) => row[7])).size]];
+  $("metrics").replaceChildren();
+  for (const [label, value] of metrics) {
+    const card = element("div", "", $("metrics"), "metric");
+    element("strong", format(value), card);
+    element("span", label, card);
+  }
+  if (!gardenCatalog || !window.GardenBadges) {
+    $("featured").replaceChildren();
+    element("p", "Garden badges are unavailable; sample records remain accessible.", $("featured"), "muted");
+    return;
+  }
+  window.GardenBadges.render($("featured"), gardenCatalog, gardenSummaries, (id) => {
+    selectedTaxonId = null;
+    selectedTreemapTaxa = null;
+    $("project").value = `g:${id}`;
+    $("family-query").value = "";
+    $("query").value = "";
+    filter();
+    sampleView = "map";
+    location.hash = "#samples";
+  });
+}
+
+function renderCountBar(parent, count, maximum) {
+  const bar = element("span", "", parent, "count-bar");
+  const track = element("span", "", bar, "count-bar-track");
+  track.setAttribute("aria-hidden", "true");
+  const fill = element("span", "", track, "count-bar-fill");
+  fill.style.width = `${maximum ? 100 * count / maximum : 0}%`;
+  element("span", format(count), bar, "count-bar-value");
+}
+
+function explore() {
+  const body = $("project-rows");
+  body.replaceChildren();
+  for (const project of projects) {
+    const tr = element("tr", "", body);
+    const cell = element("td", "", tr);
+    const link = element("a", projectName(project.name), cell);
+    link.href = "#samples";
+    link.addEventListener("click", () => {
+      selectedTaxonId = null; selectedTreemapTaxa = null; $("project").value = project.key;
+      $("family-query").value = ""; $("query").value = ""; filter();
+    });
+    for (const n of [project.count, project.taxa.size, project.located]) element("td", format(n), tr, "number");
+  }
+  renderFamilies();
+  const counts = new Map();
+  for (const row of rows) {
+    if (row[7] != null) counts.set(row[7], (counts.get(row[7]) || 0) + 1);
+  }
+  const taxonBody = $("taxon-rows");
+  taxonBody.replaceChildren();
+  const topTaxa = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 20);
+  const maximum = topTaxa[0]?.[1] || 0;
+  for (const [id, count] of topTaxa) {
+    const taxon = taxaById.get(id);
+    const tr = element("tr", "", taxonBody);
+    const cell = element("td", "", tr);
+    const link = element("a", "", cell);
+    scientificTaxon(link, taxon);
+    link.href = "#samples";
+    link.addEventListener("click", () => {
+      selectedTaxonId = id; selectedTreemapTaxa = null; $("query").value = resolvedName(taxon);
+      $("project").value = ""; $("family-query").value = ""; filter();
+    });
+    element("td", taxon[4], tr);
+    element("td", familyOf(id)?.[2] || "—", tr);
+    renderCountBar(element("td", "", tr, "number"), count, maximum);
+    catalogueLink(element("td", "", tr), taxon, "Open ↗");
+  }
+}
+
+function renderFamilies() {
+  const pageCount = Math.ceil(families.length / FAMILY_PAGE_SIZE);
+  familyPage = Math.max(0, Math.min(familyPage, Math.max(0, pageCount - 1)));
+  $("family-previous").disabled = familyPage === 0;
+  $("family-next").disabled = familyPage >= pageCount - 1;
+  $("family-page-label").textContent = families.length ?
+    `${format(familyPage * FAMILY_PAGE_SIZE + 1)}–${format(Math.min((familyPage + 1) * FAMILY_PAGE_SIZE, families.length))} of ${format(families.length)} families` :
+    "No resolved families";
+  const familyBody = $("family-rows");
+  familyBody.replaceChildren();
+  for (const family of families.slice(familyPage * FAMILY_PAGE_SIZE, (familyPage + 1) * FAMILY_PAGE_SIZE)) {
+    const tr = element("tr", "", familyBody);
+    const cell = element("td", "", tr);
+    const link = element("a", taxaById.get(family.id)[2], cell);
+    link.href = "#samples";
+    link.addEventListener("click", () => {
+      selectedTaxonId = null; selectedTreemapTaxa = null; $("project").value = ""; $("query").value = "";
+      $("family-query").value = taxaById.get(family.id)[2]; filter();
+    });
+    renderCountBar(element("td", "", tr, "number"), family.count, families[0].count);
+    element("td", format(family.taxa.size), tr, "number");
+    catalogueLink(element("td", "", tr), taxaById.get(family.id), "Open ↗");
+  }
+}
+
+function treemapChild(parent, key, taxon, label) {
+  let child = parent.children.get(key);
+  if (!child) {
+    child = {parent, taxon, label: label || taxon[2], count: 0, own: 0, children: new Map()};
+    parent.children.set(key, child);
+  }
+  return child;
+}
+
+function buildTreemap() {
+  const scope = $("treemap-project").value;
+  treemapRoot = {parent: null, taxon: null, label: "All resolved samples", count: 0, own: 0, children: new Map()};
+  let total = 0;
+  for (const row of rows) {
+    if (!projectMatches(row[2], scope)) continue;
+    total++;
+    if (row[7] == null) continue;
+    const ancestry = lineage(row[7]);
+    const family = ancestry.find((taxon) => taxon[4] === "family");
+    const genus = ancestry.find((taxon) => taxon[4] === "genus");
+    let parent = treemapRoot;
+    const path = [parent];
+    parent = family ? treemapChild(parent, family[0], family) :
+      treemapChild(parent, "no-family", null, "Without a family in Taxa");
+    path.push(parent);
+    if (genus && genus[0] !== parent.taxon?.[0]) {
+      parent = treemapChild(parent, genus[0], genus);
+      path.push(parent);
+    }
+    if (row[7] !== parent.taxon?.[0]) {
+      parent = treemapChild(parent, row[7], taxaById.get(row[7]));
+      path.push(parent);
+    }
+    for (const node of path) node.count++;
+    parent.own++;
+  }
+  treemapCurrent = treemapRoot;
+  treemapSelected = null;
+  const familiesCount = [...treemapRoot.children.values()].filter((node) => node.taxon).length;
+  $("treemap-summary").textContent = `${format(treemapRoot.count)} resolved of ${format(total)} field samples · ${format(familiesCount)} families${scope ? ` · ${scopeName(scope)}` : " · all projects"}`;
+  renderTreemap();
+}
+
+function treemapLayout(nodes, width, height) {
+  const total = nodes.reduce((sum, node) => sum + node.count, 0);
+  if (!total) return [];
+  const pending = nodes.map((node) => ({node, area: node.count * width * height / total}))
+    .sort((a, b) => b.area - a.area || a.node.label.localeCompare(b.node.label));
+  const result = [];
+  let x = 0, y = 0, w = width, h = height, strip = [];
+  function worst(items, side) {
+    let sum = 0, smallest = Infinity, largest = 0;
+    for (const item of items) {
+      sum += item.area;
+      smallest = Math.min(smallest, item.area);
+      largest = Math.max(largest, item.area);
+    }
+    return Math.max(side * side * largest / (sum * sum), sum * sum / (side * side * smallest));
+  }
+  function placeStrip() {
+    const area = strip.reduce((n, item) => n + item.area, 0);
+    if (w >= h) {
+      const stripWidth = area / h;
+      let top = y;
+      for (const item of strip) {
+        const tileHeight = item.area / stripWidth;
+        result.push({node: item.node, x, y: top, width: stripWidth, height: tileHeight});
+        top += tileHeight;
+      }
+      x += stripWidth;
+      w -= stripWidth;
+    } else {
+      const stripHeight = area / w;
+      let left = x;
+      for (const item of strip) {
+        const tileWidth = item.area / stripHeight;
+        result.push({node: item.node, x: left, y, width: tileWidth, height: stripHeight});
+        left += tileWidth;
+      }
+      y += stripHeight;
+      h -= stripHeight;
+    }
+    strip = [];
+  }
+  for (const item of pending) {
+    if (strip.length && worst([...strip, item], Math.min(w, h)) > worst(strip, Math.min(w, h))) placeStrip();
+    strip.push(item);
+  }
+  if (strip.length) placeStrip();
+  return result;
+}
+
+function treemapTaxonIds(node) {
+  const ids = new Set();
+  const pending = [node];
+  while (pending.length) {
+    const next = pending.pop();
+    if (next.own && next.taxon) ids.add(next.taxon[0]);
+    if (!next.ownOnly) for (const child of next.children.values()) pending.push(child);
+  }
+  return ids;
+}
+
+function renderTreemapDetail(node) {
+  const panel = $("treemap-detail");
+  panel.replaceChildren();
+  const title = element("strong", "", panel);
+  if (node.taxon) {
+    scientificTaxon(title, node.taxon);
+    title.append(` · ${node.taxon[4]}`);
+  } else title.textContent = node.label;
+  element("span", `${format(node.count)} resolved sample${node.count === 1 ? "" : "s"}`, panel);
+  if (node.taxon) catalogueLink(panel, node.taxon, "Open in Catalogue of Life ↗");
+  if (!node.count) return;
+  const link = element("a", `View ${format(node.count)} samples →`, panel);
+  link.href = "#samples";
+  link.addEventListener("click", () => {
+    selectedTaxonId = null;
+    selectedTreemapTaxa = treemapTaxonIds(node);
+    $("project").value = $("treemap-project").value;
+    $("query").value = "";
+    $("family-query").value = "";
+    filter();
+  });
+}
+
+function renderTreemap() {
+  if (!treemapCurrent || $("treemap-view").hidden) return;
+  const path = $("treemap-path");
+  path.replaceChildren();
+  const ancestry = [];
+  for (let node = treemapCurrent; node; node = node.parent) ancestry.unshift(node);
+  for (const node of ancestry) {
+    const button = element("button", "", path);
+    if (node === treemapRoot) button.textContent = "All families";
+    else if (node.taxon && !node.ownOnly) window.DBGIScientificNames.append(button, node.taxon[2], node.taxon[4]);
+    else button.textContent = node.label;
+    button.type = "button";
+    button.disabled = node === treemapCurrent;
+    button.addEventListener("click", () => { treemapCurrent = node; treemapSelected = null; renderTreemap(); });
+  }
+  const canvas = $("treemap-canvas");
+  canvas.replaceChildren();
+  const nodes = [...treemapCurrent.children.values()];
+  if (treemapCurrent.own && nodes.length) nodes.push({
+    parent: treemapCurrent, taxon: treemapCurrent.taxon, label: `Identified as ${treemapCurrent.taxon[4]}`,
+    count: treemapCurrent.own, own: treemapCurrent.own, children: new Map(), ownOnly: true,
+  });
+  if (!treemapCurrent.count) element("p", "No resolved samples in this project.", canvas);
+  for (const {node, x, y, width, height} of treemapLayout(nodes, canvas.clientWidth, canvas.clientHeight)) {
+    const tile = element("button", "", canvas, "treemap-tile");
+    tile.type = "button";
+    tile.style.left = `${x}px`;
+    tile.style.top = `${y}px`;
+    tile.style.width = `${width}px`;
+    tile.style.height = `${height}px`;
+    let family = node;
+    while (family && family.taxon?.[4] !== "family") family = family.parent;
+    const [background, text] = family ?
+      TREEMAP_COLORS[(Math.imul(family.taxon[0], 2654435761) >>> 0) % TREEMAP_COLORS.length] : ["#44505a", "#fff"];
+    tile.style.backgroundColor = background;
+    tile.style.color = text;
+    const label = `${node.label} · ${format(node.count)} sample${node.count === 1 ? "" : "s"}`;
+    tile.title = label;
+    tile.setAttribute("aria-label", label);
+    if (width >= 78 && height >= 35) {
+      const name = element("span", "", tile);
+      if (node.taxon && !node.ownOnly) window.DBGIScientificNames.append(name, node.taxon[2], node.taxon[4]);
+      else name.textContent = node.label;
+    }
+    if (width >= 95 && height >= 58) element("small", format(node.count), tile);
+    tile.addEventListener("click", () => {
+      if (node.children.size && !node.ownOnly) {
+        treemapCurrent = node;
+        treemapSelected = null;
+        renderTreemap();
+      } else {
+        treemapSelected = node;
+        for (const selected of canvas.querySelectorAll(".is-selected")) selected.classList.remove("is-selected");
+        tile.classList.add("is-selected");
+        renderTreemapDetail(node);
+      }
+    });
+  }
+  renderTreemapDetail(treemapSelected || treemapCurrent);
+}
+
+function filter({keepMapSelection = false} = {}) {
+  if (!keepMapSelection) mapSelection = null;
+  const query = $("query").value.trim().toLocaleLowerCase();
+  const project = $("project").value;
+  const familyQuery = $("family-query").value.trim().toLocaleLowerCase();
+  const profiledOnly = $("profiled-only").checked;
+  const matchingFamilies = familyQuery ? new Set(families.filter((entry) =>
+    taxaById.get(entry.id)[2].toLocaleLowerCase().includes(familyQuery)).map((entry) => entry.id)) : null;
+  filtered = rows.filter((row) => projectMatches(row[2], project) &&
+    (!matchingFamilies || matchingFamilies.has(familyOf(row[7])?.[0])) &&
+    (!selectedTreemapTaxa || selectedTreemapTaxa.has(row[7])) &&
+    (!mapSelection || mapSelection.has(row[0])) &&
+    (!profiledOnly || msProfileIndex?.byField.has(row[0])) &&
+    (!query || (selectedTaxonId != null ? row[7] === selectedTaxonId :
+      row[1].toLocaleLowerCase().includes(query) ||
+      (row[3] || "").toLocaleLowerCase().includes(query) ||
+      resolvedName(taxaById.get(row[7])).toLocaleLowerCase().includes(query))));
+  page = 0;
+  renderPage();
+  const located = filtered.reduce((count, row) => count + (Number.isFinite(row[4]) && Number.isFinite(row[5]) ? 1 : 0), 0);
+  $("mapped-count").textContent = `${format(located)} of ${format(filtered.length)} matching samples have coordinates. Zoom into groups to see exact locations; at maximum zoom, coincident points fan out with lines back to their recorded coordinate.`;
+  if (sampleView === "map" && samplesMap && !$("samples-view").hidden) {
+    fitMapToResults();
+    renderMapMarkers();
+  }
+}
+
+function renderPage() {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  page = Math.min(Math.max(0, page), totalPages - 1);
+  $("result-count").textContent = `${format(filtered.length)} matching samples${$("profiled-only").checked ? " · MS file recorded for this sample" : ""}${selectedTaxonId != null ? " · exact CoL taxon" : ""}${selectedTreemapTaxa ? " · treemap selection" : ""}${mapSelection ? " · selected map group" : ""}`;
+  $("page-label").textContent = `Page ${page + 1} of ${totalPages}`;
+  $("previous").disabled = page === 0;
+  $("next").disabled = page >= totalPages - 1;
+  $("empty").hidden = filtered.length !== 0;
+  const body = $("sample-rows");
+  body.replaceChildren();
+  for (const row of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
+    const tr = element("tr", "", body);
+    const cell = element("td", "", tr);
+    const link = element("a", row[1], cell);
+    link.href = `#sample/${row[0]}`;
+    const taxonCell = element("td", "", tr);
+    const species = speciesOf(row[7]);
+    scientificTaxon(species ? element("a", "", taxonCell) : taxonCell, taxaById.get(row[7]));
+    if (species) taxonCell.firstChild.href = `#species/${species[0]}`;
+    element("td", row[3] || "—", tr);
+    element("td", familyOf(row[7])?.[2] || "—", tr);
+    element("td", projectName(row[2]), tr);
+    renderSampleStages(row, element("td", "", tr));
+    itemLink(element("td", "", tr), "Field_Data", row[0], "Open ↗", `Open ${row[1]} in Directus`);
+  }
+}
+function renderSampleStages(row, parent) {
+  const badges = element("div", "", parent, "stage-badges");
+  element("span", "Field collected", badges, "stage-badge stage-badge--field");
+  if (!processingIndex) {
+    element("span", processingError ? "Extraction unknown" : "Checking extraction…", badges, "stage-badge stage-badge--unknown");
+  } else {
+    const extracts = (processingIndex.byField.get(row[0]) || []).filter((record) => record[0] === "extract");
+    const badge = element("span", extracts.length ? "Extraction recorded" : "No extraction record", badges,
+      `stage-badge ${extracts.length ? "stage-badge--extract" : "stage-badge--unknown"}`);
+    if (extracts.length) badge.title = `Directus Extraction_Data status: ${[...new Set(extracts.map((record) => record[6] || "not recorded"))].join(", ")}. A record does not prove successful extraction.`;
+  }
+  const profiled = msProfileIndex?.byField.get(row[0])?.length;
+  element("span", !msProfileIndex ? (msProfileError ? "MS status unknown" : "Checking MS…") :
+    profiled ? "MS file recorded" : "No MS file recorded", badges,
+    `stage-badge ${profiled ? "stage-badge--ms" : "stage-badge--unknown"}`);
+}
+
+function renderSpecies(taxon) {
+  const title = $("species-title");
+  title.replaceChildren();
+  scientificTaxon(title, taxon);
+  title.append(" ");
+  catalogueLink(title, taxon, "CoL ↗");
+  const specimens = speciesRows.get(taxon[0]) || [];
+  $("species-summary").textContent = `${format(specimens.length)} linked field ${specimens.length === 1 ? "sample" : "samples"} · Taxa #${taxon[0]} · CoL ${taxon[1]}`;
+  renderSpeciesMS(taxon);
+  renderSpeciesCards();
+  renderSpeciesMetabolome(taxon);
+  window.ChemCalc.render($("species-chemcalc"));
+}
+
+function renderSpeciesMS(taxon) {
+  const root = $("species-ms");
+  root.replaceChildren();
+  if (!msProfileIndex) {
+    element("span", msProfileError ? "MS profile snapshot unavailable." : "Checking linked MS profiles…", root, "muted");
+    return;
+  }
+  const group = msProfileIndex.bySpecies.get(taxon[0]);
+  if (!group) {
+    element("p", "No linked MS file recorded for this species in the MS snapshot.", root, "muted");
+    return;
+  }
+  element("strong", "MS profile recorded", root, "species-ms-badge");
+  element("p", `${format(group.fieldIds.size)} profiled field ${group.fieldIds.size === 1 ? "sample" : "samples"} of this species`, root);
+  const instruments = element("p", "Instruments: ", root);
+  let first = true;
+  for (const id of group.instrumentIds) {
+    if (!first) instruments.append(" · ");
+    first = false;
+    const instrument = msProfileIndex.instruments.get(id);
+    itemLink(instruments, "Instruments", id, `${instrument.model} (${instrument.code})`, `Open ${instrument.model} in Directus`);
+  }
+}
+
+function renderSpeciesCards() {
+  const specimens = speciesRows.get(selectedSpeciesId) || [];
+  const totalPages = Math.max(1, Math.ceil(specimens.length / PAGE_SIZE));
+  speciesPage = Math.min(Math.max(0, speciesPage), totalPages - 1);
+  $("species-page-label").textContent = `Page ${speciesPage + 1} of ${totalPages}`;
+  $("species-previous").disabled = speciesPage === 0;
+  $("species-next").disabled = speciesPage >= totalPages - 1;
+  const cards = $("species-cards");
+  cards.replaceChildren();
+  for (const row of specimens.slice(speciesPage * PAGE_SIZE, (speciesPage + 1) * PAGE_SIZE)) {
+    const card = element("article", "", cards, "species-card");
+    const heading = element("h3", "", card);
+    const sample = element("a", row[1], heading);
+    sample.href = `#sample/${row[0]}`;
+    const identifyingTaxon = taxaById.get(row[7]);
+    const identification = element("p", "Resolved as ", card, "species-identification");
+    scientificTaxon(identification, identifyingTaxon);
+    element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${row[6] ? ` · ${row[6]}` : ""}`, card, "muted");
+    if (processingIndex) {
+      const stages = processingIndex.byField.get(row[0]) || [];
+      const counts = ["dried", "extract", "aliquot", "ms"].map((kind) => stages.filter((record) => record[0] === kind).length);
+      element("p", `${counts[0]} dried · ${counts[1]} extracts · ${counts[2]} aliquots · ${counts[3]} MS records`, card, "species-stages");
+    } else {
+      element("p", processingError ? "Processing snapshot unavailable." : "Checking downstream records…", card, "muted");
+    }
+    itemLink(card, "Field_Data", row[0], `Directus Field_Data #${row[0]} ↗`, `Open field sample ${row[1]} in Directus`);
+  }
+}
+
+function renderSpeciesMetabolome(taxon) {
+  const root = $("species-metabolome");
+  root.replaceChildren();
+  root.hidden = true;
+  if (wikidataTaxa) window.Metabolome.render(root, {taxon, taxaById, mapping: wikidataTaxa});
+}
+
+
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (!leafletPromise) leafletPromise = new Promise((resolve, reject) => {
+    const style = document.createElement("link");
+    style.rel = "stylesheet";
+    style.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    style.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
+    style.crossOrigin = "anonymous";
+    style.onerror = () => reject(new Error("Map stylesheet could not load"));
+    style.onload = () => {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
+      script.crossOrigin = "anonymous";
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Map library could not load"));
+      document.head.append(script);
+    };
+    document.head.append(style);
+  }).catch((error) => { leafletPromise = null; throw error; });
+  return leafletPromise;
+}
+
+async function setSampleView(view) {
+  sampleView = view;
+  $("list-panel").hidden = view !== "list";
+  $("map-panel").hidden = view !== "map";
+  $("view-list").setAttribute("aria-pressed", String(view === "list"));
+  $("view-map").setAttribute("aria-pressed", String(view === "map"));
+  if (view !== "map" || $("samples-view").hidden) return;
+  $("map-status").textContent = "Loading map…";
+  try {
+    await loadLeaflet();
+    if (sampleView !== "map" || $("samples-view").hidden) return;
+    if (!samplesMap) {
+      samplesMap = L.map("samples-map", {scrollWheelZoom: false});
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+      }).addTo(samplesMap);
+      markerLayer = L.layerGroup().addTo(samplesMap);
+      samplesMap.on("moveend", renderMapMarkers);
+    }
+    samplesMap.invalidateSize();
+    fitMapToResults();
+  } catch (error) {
+    $("map-status").textContent = `${error.message}. The list view remains available.`;
+  }
+}
+
+function fitMapToResults() {
+  samplesMap.closePopup();
+  $("map-status").textContent = "";
+  let south = Infinity, west = Infinity, north = -Infinity, east = -Infinity;
+  for (const row of filtered) {
+    const longitude = row[4], latitude = row[5];
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude) ||
+        Math.abs(longitude) > 180 || Math.abs(latitude) > 90) continue;
+    south = Math.min(south, latitude);
+    north = Math.max(north, latitude);
+    west = Math.min(west, longitude);
+    east = Math.max(east, longitude);
+  }
+  if (south === Infinity) {
+    markerLayer.clearLayers();
+    samplesMap.setView([20, 0], 2);
+    $("map-status").textContent = "No matching samples have valid coordinates.";
+    return;
+  }
+  samplesMap.fitBounds(L.latLngBounds([south, west], [north, east]),
+    {padding: [24, 24], maxZoom: 14, animate: false});
+}
+
+function renderMapMarkers() {
+  if (!samplesMap || !markerLayer || $("samples-view").hidden || sampleView !== "map") return;
+  markerLayer.clearLayers();
+  const bounds = samplesMap.getBounds();
+  const precise = samplesMap.getZoom() >= PRECISE_MAP_ZOOM;
+  const buckets = new Map();
+  for (const row of filtered) {
+    if (!Number.isFinite(row[4]) || !Number.isFinite(row[5]) || !bounds.contains([row[5], row[4]])) continue;
+    let key;
+    if (precise) key = `${row[4]},${row[5]}`;
+    else {
+      const point = samplesMap.latLngToContainerPoint([row[5], row[4]]);
+      key = `${Math.floor(point.x / 40)}:${Math.floor(point.y / 40)}`;
+    }
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {rows: [], latitude: 0, longitude: 0};
+      buckets.set(key, bucket);
+    }
+    bucket.rows.push(row);
+    if (!precise) {
+      bucket.latitude += row[5];
+      bucket.longitude += row[4];
+    }
+  }
+  for (const bucket of buckets.values()) {
+    const count = bucket.rows.length;
+    if (precise && samplesMap.getZoom() === 19 && count > 1) {
+      const origin = [bucket.rows[0][5], bucket.rows[0][4]];
+      const anchor = samplesMap.latLngToLayerPoint(origin);
+      for (let index = 0; index < count; index++) {
+        const angle = index * 2.399963229728653;
+        const radius = 12 + 9 * Math.sqrt(index);
+        const display = samplesMap.layerPointToLatLng(L.point(
+          anchor.x + Math.cos(angle) * radius, anchor.y + Math.sin(angle) * radius,
+        ));
+        L.polyline([origin, display], {color: "#3e503c", weight: 1, opacity: 0.4, interactive: false}).addTo(markerLayer);
+        const row = bucket.rows[index];
+        const point = L.marker(display, {
+          icon: L.divIcon({className: "sample-point", iconSize: [8, 8]}),
+          title: `${row[1]} · ${resolvedName(taxaById.get(row[7]))}`,
+          riseOnHover: true,
+        }).addTo(markerLayer);
+        point.on("click", () => {
+          const content = element("div", "", null);
+          element("strong", row[1], content);
+          const link = element("a", "Open ", content);
+          scientificTaxon(link, taxaById.get(row[7]));
+          link.append(" sample →");
+          link.href = `#sample/${row[0]}`;
+          element("p", `${row[5]}, ${row[4]} (recorded latitude, longitude)`, content);
+          element("p", "Display point separated from coincident samples; its line leads to the exact recorded location.", content);
+          L.popup({maxWidth: 340}).setLatLng(point.getLatLng()).setContent(content).openOn(samplesMap);
+        });
+      }
+      continue;
+    }
+    const size = count > 999 ? 52 : count > 99 ? 42 : count > 9 ? 34 : 30;
+    const position = precise ? [bucket.rows[0][5], bucket.rows[0][4]] :
+      [bucket.latitude / count, bucket.longitude / count];
+    const marker = L.marker(position, {
+      icon: precise ? L.divIcon({className: "sample-point", iconSize: samplesMap.getZoom() === 19 ? [8, 8] : [12, 12]}) :
+        L.divIcon({className: "sample-cluster", html: `<span>${count}</span>`, iconSize: [size, size]}),
+      title: `${format(count)} sample${count === 1 ? "" : "s"}`,
+    }).addTo(markerLayer);
+    marker.on("click", () => {
+      if (count > 1 && !precise) {
+        samplesMap.setView(marker.getLatLng(), samplesMap.getZoom() + 1);
+        return;
+      }
+      const content = element("div", "", null);
+      element("strong", `${format(count)} sample${count === 1 ? "" : "s"} ${precise ? "at this coordinate" : "nearby"}`, content);
+      if (precise) element("p", `${bucket.rows[0][5]}, ${bucket.rows[0][4]} (latitude, longitude)`, content);
+      for (const row of bucket.rows.slice(0, 20)) {
+        const line = element("div", "", content);
+        const link = element("a", `${row[1]} · `, line);
+        scientificTaxon(link, taxaById.get(row[7]));
+        link.href = `#sample/${row[0]}`;
+      }
+      if (count > 20) element("p", `${format(count - 20)} more in this group.`, content);
+      if (count > 1) {
+        const button = element("button", `Show all ${format(count)} in list`, content, "secondary");
+        button.type = "button";
+        button.addEventListener("click", () => {
+          mapSelection = new Set(bucket.rows.map((row) => row[0]));
+          filter({keepMapSelection: true});
+          setSampleView("list");
+        });
+      }
+      L.popup({maxWidth: 340, maxHeight: 260}).setLatLng(marker.getLatLng()).setContent(content).openOn(samplesMap);
+    });
+  }
+}
+
+function detail(row) {
+  const taxon = taxaById.get(row[7]);
+  const family = familyOf(row[7]);
+  $("detail-title").replaceChildren();
+  scientificTaxon($("detail-title"), taxon);
+  $("detail-id").textContent = row[1];
+  const species = speciesOf(row[7]);
+  const speciesLink = $("detail-species");
+  speciesLink.replaceChildren();
+  speciesLink.hidden = !species;
+  if (species) {
+    const link = element("a", "All field samples of ", speciesLink);
+    scientificTaxon(link, species);
+    link.append(" →");
+    link.href = `#species/${species[0]}`;
+  }
+  renderMSDetail(row);
+  renderGNPSDetail(row);
+  window.ChemCalc.render($("sample-chemcalc"));
+  renderProcessingDetail(row);
+  const fields = $("detail-fields");
+  fields.replaceChildren();
+  for (const [label, value] of [
+    ...(gardenByProject.has(row[2]) ? [["Botanical garden", gardenByProject.get(row[2]).name]] : []),
+    ["Directus project", projectName(row[2])], ["Field name (unified)", row[3] || "Not recorded"],
+    ["Resolved CoL name", taxon ? resolvedName(taxon) : "Not resolved"],
+    ["CoL rank", taxon?.[4] || "—"], ["CoL family", family?.[2] || "—"],
+    ["CoL usage ID", taxon?.[1] || "—"], ["Taxa Directus ID", taxon?.[0] ?? "—"],
+    ["Resolution status", row[8] || "Not linked"],
+    ["Backbone version", taxon?.[6] || "—"],
+    ["Collection date", row[6] || "Not recorded"], ["Directus record ID", String(row[0])],
+  ]) {
+    element("dt", label, fields);
+    const cell = element("dd", value, fields);
+    if (label === "Botanical garden") {
+      cell.replaceChildren();
+      sampleFilterLink(cell, value, {project: `g:${gardenByProject.get(row[2]).id}`, map: true});
+    } else if (label === "Directus project") {
+      cell.replaceChildren();
+      sampleFilterLink(cell, value, {project: `p:${row[2] || ""}`});
+    } else if (label === "Field name (unified)" && row[3]) {
+      cell.replaceChildren();
+      itemLink(cell, "Field_Data", row[0], row[3], `Open recorded field name for ${row[1]} in Directus`);
+    } else if (label === "Resolved CoL name" && taxon) {
+      cell.replaceChildren();
+      const species = speciesOf(row[7]);
+      const target = species ? element("a", "", cell) : catalogueLink(cell, taxon, "");
+      scientificTaxon(target || cell, taxon);
+      if (species) target.href = `#species/${species[0]}`;
+    } else if (label === "CoL family" && family) {
+      cell.replaceChildren();
+      sampleFilterLink(cell, family[2], {family: family[2]});
+      cell.append(" ");
+      catalogueLink(cell, family, "CoL ↗");
+    } else if (label === "CoL usage ID" && taxon) {
+      cell.replaceChildren();
+      catalogueLink(cell, taxon, taxon[1]);
+    } else if (label === "CoL rank" && taxon) {
+      cell.replaceChildren();
+      catalogueLink(cell, taxon, taxon[4]);
+    } else if (label === "Taxa Directus ID" && taxon) {
+      cell.replaceChildren();
+      itemLink(cell, "Taxa", taxon[0], String(taxon[0]), `Open ${taxon[2]} Taxa record in Directus`);
+    } else if (label === "Directus record ID") {
+      cell.replaceChildren();
+      itemLink(cell, "Field_Data", row[0], String(row[0]), `Open ${row[1]} field record in Directus`);
+    }
+  }
+  const ancestry = $("ancestry");
+  ancestry.hidden = !taxon;
+  ancestry.open = false;
+  const list = $("ancestry-list");
+  list.replaceChildren();
+  if (taxon) for (const ancestor of lineage(taxon[0])) {
+    const item = element("li", `${ancestor[4]} · `, list);
+    const publicLink = catalogueLink(item, ancestor, "");
+    scientificTaxon(publicLink || item, ancestor);
+    if (publicLink) publicLink.append(" ↗");
+  }
+  const located = Number.isFinite(row[4]) && Number.isFinite(row[5]);
+  $("location").hidden = !located;
+  $("sample-context").classList.toggle("has-map", located);
+  if (located) {
+    const latitude = `${Math.abs(row[5]).toFixed(5)}° ${row[5] < 0 ? "S" : "N"}`;
+    const longitude = `${Math.abs(row[4]).toFixed(5)}° ${row[4] < 0 ? "W" : "E"}`;
+    $("coordinates").textContent = `${latitude}, ${longitude}`;
+    const map = new URL("https://www.openstreetmap.org/export/embed.html");
+    map.searchParams.set("bbox", [row[4] - 0.015, row[5] - 0.01, row[4] + 0.015, row[5] + 0.01].join(","));
+    map.searchParams.set("layer", "mapnik");
+    map.searchParams.set("marker", `${row[5]},${row[4]}`);
+    $("sample-map").src = map.href;
+    $("map-link").href = `https://www.openstreetmap.org/?mlat=${row[5]}&mlon=${row[4]}#map=15/${row[5]}/${row[4]}`;
+  }
+  else $("sample-map").removeAttribute("src");
+  window.SampleWeather.render($("sample-weather"), {
+    sampleId: row[1], date: row[6], latitude: row[5], longitude: row[4],
+  });
+  renderInaturalistSample(row[1]);
+  renderMetabolomeDetail(taxon);
+}
+
+function renderInaturalistSample(sampleId) {
+  const root = $("sample-inaturalist");
+  root.replaceChildren();
+  root.hidden = true;
+  if (inaturalistData) root.hidden = !window.INaturalist.renderSample(root, sampleId, inaturalistData);
+  else if (inaturalistError) {
+    root.hidden = false;
+    element("p", `Linked iNaturalist observations unavailable: ${inaturalistError}`, root, "muted");
+  }
+  $("sample-overview").classList.toggle("has-observations", !root.hidden);
+}
+
+function renderInaturalistReview() {
+  const root = $("inaturalist-review");
+  if (!sampleSnapshot) return;
+  if (inaturalistData) window.INaturalist.renderReview(root, inaturalistData, sampleSnapshot);
+  else if (inaturalistError) {
+    root.replaceChildren();
+    element("p", `iNaturalist identification review unavailable: ${inaturalistError}`, root, "muted");
+  }
+}
+
+async function loadInaturalist() {
+  try {
+    const response = await fetch("data/inaturalist.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    inaturalistData = await response.json();
+  } catch (error) {
+    inaturalistError = error.message;
+  }
+  if (!sampleSnapshot) return;
+  if (!$("detail-view").hidden) renderInaturalistSample($("detail-id").textContent);
+  if (!$("inaturalist-view").hidden) renderInaturalistReview();
+}
+
+function renderMetabolomeDetail(taxon) {
+  const root = $("sample-metabolome");
+  root.replaceChildren();
+  root.hidden = true;
+  if (wikidataTaxa) window.Metabolome.render(root, {taxon, taxaById, mapping: wikidataTaxa});
+}
+
+async function loadWikidataTaxa() {
+  try {
+    const response = await fetch("data/wikidata_taxa.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    const mapping = await response.json();
+    if (mapping.property !== "P10585" || !Array.isArray(mapping.rows)) {
+      throw new Error("Unexpected CoL-to-Wikidata mapping format");
+    }
+    wikidataTaxa = mapping;
+    if (!$("detail-view").hidden && location.hash.startsWith("#sample/")) {
+      const row = byId.get(Number(location.hash.slice(8)));
+      if (row) renderMetabolomeDetail(taxaById.get(row[7]));
+    }
+    if (!$("species-view").hidden && location.hash.startsWith("#species/")) {
+      const taxon = taxaById.get(Number(location.hash.slice(9)));
+      if (taxon?.[4] === "species") renderSpeciesMetabolome(taxon);
+    }
+  } catch (error) {
+    console.warn("Wikidata species links unavailable:", error);
+  }
+}
+
+function renderMSDetail(row) {
+  const root = $("sample-ms");
+  root.replaceChildren();
+  if (msProfileIndex) {
+    window.MSProfile.render(root, {row, taxaById, index: msProfileIndex, directusBase});
+  } else {
+    element("span", msProfileError ? "MS profiling snapshot unavailable." : "Checking MS profiles…", root, "muted");
+  }
+}
+
+function renderGNPSDetail(row) {
+  const profiles = msProfileIndex?.byField.get(row[0]) || [];
+  window.GNPSDashboard.render($("sample-gnps"), {profiles});
+}
+function renderProcessingDetail(row) {
+  const root = $("sample-processing");
+  if (processingIndex) {
+    window.DBGIProcessing.render(root, {row, index: processingIndex, directusBase});
+  } else {
+    root.replaceChildren();
+    element("h3", "Specimen processing", root);
+    element("p", processingError ? "Directus processing snapshot unavailable." : "Checking linked dried samples, extracts and aliquots…", root, "muted");
+  }
+}
+
+async function loadProcessing() {
+  try {
+    const response = await fetch("data/processing.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    processingIndex = window.DBGIProcessing.buildIndex(await response.json(), byId, directusBase);
+  } catch (error) {
+    processingError = error.message;
+    console.warn("Directus specimen processing unavailable:", error);
+  }
+  if (!$("detail-view").hidden && location.hash.startsWith("#sample/")) {
+    const row = byId.get(Number(location.hash.slice(8)));
+    if (row) renderProcessingDetail(row);
+  }
+  if (!$("species-view").hidden && location.hash.startsWith("#species/")) renderSpeciesCards();
+  if (!$("samples-view").hidden) renderPage();
+}
+
+
+
+async function loadMSProfiles() {
+  try {
+    const response = await fetch("data/ms_profile.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    const snapshot = await response.json();
+    if (!directusBase || snapshot.source !== `${directusBase}/items/` ||
+        !Array.isArray(snapshot.instruments) || !Array.isArray(snapshot.profiles)) {
+      throw new Error("Unexpected Directus MS profiling snapshot");
+    }
+    msProfileIndex = window.MSProfile.buildIndex(snapshot, byId, taxaById);
+  } catch (error) {
+    msProfileError = error.message;
+    console.warn("Directus MS profiling unavailable:", error);
+  }
+  if (!$("detail-view").hidden && location.hash.startsWith("#sample/")) {
+    const row = byId.get(Number(location.hash.slice(8)));
+    if (row) {
+      renderMSDetail(row);
+      renderGNPSDetail(row);
+    }
+  }
+  if (!$("species-view").hidden && location.hash.startsWith("#species/")) {
+    const taxon = taxaById.get(Number(location.hash.slice(9)));
+    if (taxon?.[4] === "species") renderSpeciesMS(taxon);
+  }
+  if (!msProfileIndex) $("profiled-only").checked = false;
+  $("profiled-only").disabled = !msProfileIndex;
+  $("profiled-filter-status").hidden = !!msProfileIndex && !$("profiled-only").checked;
+  $("profiled-filter-status").textContent = msProfileError ?
+    "MS file snapshot unavailable; the profiled-only filter cannot be used." :
+    "Only this field sample's Directus MS files with OK/published status count; this does not establish successful QC.";
+  if (!$("samples-view").hidden) filter({keepMapSelection: true});
+}
+
+
+
+async function load() {
+  try {
+    const response = await fetch("data/samples.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    const snapshot = await response.json();
+    if (!Array.isArray(snapshot.rows) || !Array.isArray(snapshot.taxa) ||
+        snapshot.columns?.join(",") !== "directus_id,sample_id,project,recorded_taxon,longitude,latitude,date,taxon_id,resolution_status" ||
+        snapshot.taxon_columns?.join(",") !== "id,col_id,scientific_name,authorship,rank,parent_id,backbone_version") {
+      throw new Error("Unexpected snapshot format; rebuild it with the current exporter");
+    }
+    try {
+      const gardenResponse = await fetch("data/gardens.json");
+      if (!gardenResponse.ok) throw new Error(`Garden catalog request returned HTTP ${gardenResponse.status}`);
+      gardenCatalog = await gardenResponse.json();
+      if (!Array.isArray(gardenCatalog.gardens) || gardenCatalog.gardens.length !== 5) {
+        throw new Error("Unexpected five-garden catalog");
+      }
+      for (const garden of gardenCatalog.gardens) {
+        if (!garden.id || !garden.name || !Array.isArray(garden.aliases) || !garden.aliases.length ||
+            gardenById.has(garden.id)) throw new Error("Invalid garden catalog entry");
+        gardenById.set(garden.id, garden);
+        for (const alias of garden.aliases) {
+          if (typeof alias !== "string" || gardenByProject.has(alias)) throw new Error("Duplicate garden project alias");
+          gardenByProject.set(alias, garden);
+        }
+      }
+    } catch {
+      gardenCatalog = null;
+      gardenById.clear();
+      gardenByProject.clear();
+    }
+    let source;
+    try { source = new URL(snapshot.source); } catch { source = null; }
+    if (source && source.protocol === "https:" && !source.username && !source.password && !source.search && !source.hash) {
+      directusBase = source.href.replace(/\/$/, "");
+    }
+    sampleSnapshot = snapshot;
+    rows = snapshot.rows;
+    for (const taxon of snapshot.taxa) taxaById.set(taxon[0], taxon);
+    const groups = new Map();
+    const familyGroups = new Map();
+    for (const row of rows) {
+      byId.set(row[0], row);
+      const name = row[2] || "";
+      if (!groups.has(name)) groups.set(name, { name, count: 0, taxa: new Set(), located: 0 });
+      const group = groups.get(name);
+      group.count++;
+      if (row[7] != null) {
+        if (!taxaById.has(row[7])) throw new Error(`Missing resolved Taxa record ${row[7]}`);
+        const species = speciesOf(row[7]);
+        if (species) {
+          if (!speciesRows.has(species[0])) speciesRows.set(species[0], []);
+          speciesRows.get(species[0]).push(row);
+        }
+        group.taxa.add(row[7]);
+        const family = familyOf(row[7]);
+        if (family) {
+          if (!familyGroups.has(family[0])) familyGroups.set(family[0], { id: family[0], count: 0, taxa: new Set() });
+          const entry = familyGroups.get(family[0]);
+          entry.count++;
+          entry.taxa.add(row[7]);
+        }
+      }
+      if (Number.isFinite(row[4]) && Number.isFinite(row[5])) group.located++;
+    }
+    gardenSummaries = gardenCatalog ? gardenCatalog.gardens.map((garden) => {
+      const result = {id: garden.id, name: garden.name, garden: garden.name, key: `g:${garden.id}`,
+        projects: garden.aliases, count: 0, samples: 0, taxa: new Set(), located: 0};
+      for (const alias of garden.aliases) {
+        const group = groups.get(alias);
+        if (!group) continue;
+        result.count += group.count;
+        result.located += group.located;
+        for (const taxon of group.taxa) result.taxa.add(taxon);
+      }
+      result.samples = result.count;
+      return result;
+    }) : [];
+    const otherProjects = [...groups.values()].filter((group) => !gardenByProject.has(group.name))
+      .map((group) => ({...group, key: `p:${group.name}`}))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    projects = [...gardenSummaries, ...otherProjects];
+    families = [...familyGroups.values()].sort((a, b) => b.count - a.count || taxaById.get(a.id)[2].localeCompare(taxaById.get(b.id)[2]));
+    for (const group of projects) {
+      const option = element("option", projectName(group.name), $("project"));
+      option.value = group.key;
+      const treemapOption = element("option", projectName(group.name), $("treemap-project"));
+      treemapOption.value = group.key;
+    }
+    if (gardenCatalog) {
+      const aliases = element("optgroup", "", $("project"));
+      aliases.label = "Individual Directus projects";
+      for (const garden of gardenCatalog.gardens) for (const alias of garden.aliases) {
+        const option = element("option", `${garden.name} · ${alias}`, aliases);
+        option.value = `p:${alias}`;
+      }
+    }
+    for (const family of [...families].sort((a, b) => taxaById.get(a.id)[2].localeCompare(taxaById.get(b.id)[2]))) {
+      const option = element("option", "", $("family-suggestions"));
+      option.value = taxaById.get(family.id)[2];
+    }
+    $("updated").textContent = `Snapshot: ${new Date(snapshot.generated_at).toLocaleDateString()} · ${format(snapshot.total_rows)} source records`;
+    summary(); explore(); filter(); buildTreemap(); route();
+  } catch (error) {
+    $("status").textContent = `Could not load the sample snapshot: ${error.message}. Run the snapshot builder or try again later.`;
+  }
+}
+
+async function loadGardenProgress() {
+  const root = $("garden-progress-chart");
+  try {
+    const response = await fetch("data/garden_progress.json");
+    if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
+    window.GardenProgress.render(root, await response.json());
+  } catch (error) {
+    root.replaceChildren();
+    element("p", `Garden progress unavailable: ${error.message}`, root, "muted");
+  }
+}
+
+$("query").addEventListener("input", () => { selectedTaxonId = null; selectedTreemapTaxa = null; filter(); });
+$("project").addEventListener("change", () => { selectedTreemapTaxa = null; filter(); });
+$("family-query").addEventListener("input", () => { selectedTreemapTaxa = null; filter(); });
+$("profiled-only").addEventListener("change", () => {
+  $("profiled-filter-status").hidden = !$("profiled-only").checked;
+  filter();
+});
+$("clear").addEventListener("click", () => {
+  selectedTaxonId = null; selectedTreemapTaxa = null;
+  $("query").value = ""; $("project").value = ""; $("family-query").value = "";
+  $("profiled-only").checked = false;
+  $("profiled-filter-status").hidden = !!msProfileIndex;
+  filter();
+});
+$("treemap-project").addEventListener("change", buildTreemap);
+$("family-previous").addEventListener("click", () => { familyPage--; renderFamilies(); });
+$("family-next").addEventListener("click", () => { familyPage++; renderFamilies(); });
+new ResizeObserver(() => renderTreemap()).observe($("treemap-canvas"));
+$("previous").addEventListener("click", () => { page--; renderPage(); });
+$("view-list").addEventListener("click", () => setSampleView("list"));
+$("view-map").addEventListener("click", () => setSampleView("map"));
+$("next").addEventListener("click", () => { page++; renderPage(); });
+$("species-previous").addEventListener("click", () => {
+  speciesPage--;
+  renderSpeciesCards();
+  $("species-cards").scrollIntoView({block: "start"});
+});
+$("species-next").addEventListener("click", () => {
+  speciesPage++;
+  renderSpeciesCards();
+  $("species-cards").scrollIntoView({block: "start"});
+});
+$("hero-search").addEventListener("submit", (event) => {
+  event.preventDefault();
+  selectedTaxonId = null;
+  selectedTreemapTaxa = null;
+  $("query").value = $("hero-query").value;
+  $("project").value = "";
+  $("profiled-only").checked = false;
+  $("profiled-filter-status").hidden = !!msProfileIndex;
+  $("family-query").value = "";
+  filter();
+  location.hash = "#samples";
+});
+addEventListener("hashchange", route);
+addEventListener("DOMContentLoaded", () => {
+  load();
+  loadGardenProgress();
+});
