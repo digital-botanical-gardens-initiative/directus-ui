@@ -21,7 +21,7 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../chemcalc.js");
+require("../assets/js/chemcalc.js");
 
 const {render} = window.ChemCalc;
 

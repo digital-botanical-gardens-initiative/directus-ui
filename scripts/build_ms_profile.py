@@ -19,8 +19,9 @@ FIELDS = {
     "Dried_Samples_Data": "id,field_data,sample_container",
     "Extraction_Data": "id,sample_container,parent_sample_container",
     "Aliquoting_Data": "id,sample_container,parent_sample_container",
-    "MS_Data": "id,status,uuid_ms_file,instrument_used,parent_sample_container,filename",
+    "MS_Data": "id,status,uuid_ms_file,instrument_used,injection_method,parent_sample_container,filename",
     "Instruments": "id,instrument_id,instrument_model.id,instrument_model.instrument_model",
+    "Injection_Methods": "id,polarity",
 }
 SAMPLE_COLUMNS = ["directus_id", "sample_id", "project", "recorded_taxon", "longitude",
                   "latitude", "date", "taxon_id", "resolution_status", "observation_subject"]
@@ -70,11 +71,21 @@ def profile_snapshot(records, published, base, generated_at):
                 or not model["instrument_model"].strip()):
             raise ValueError(f"Instruments {instrument['id']} has no valid code or model relation")
         instruments.append([instrument["id"], code, model["instrument_model"]])
+    methods = []
+    for method in rows["Injection_Methods"].values():
+        polarity = method.get("polarity")
+        if polarity not in ("positive", "negative", None):
+            raise ValueError(f"Injection_Methods {method['id']} has an unknown polarity")
+        methods.append([method["id"], polarity])
     profiles = []
     unavailable_filenames = 0
     excluded = {"excluded_unlinked_ms": 0, "excluded_outside_snapshot_ms": 0,
                 "excluded_without_file_ms": 0, "excluded_other_status_ms": 0}
     for ms in rows["MS_Data"].values():
+        method_id = ms.get("injection_method")
+        if method_id is not None and (isinstance(method_id, bool) or not isinstance(method_id, int)
+                                      or method_id not in rows["Injection_Methods"]):
+            raise ValueError(f"MS_Data {ms['id']} references a missing injection method")
         instrument_id = ms.get("instrument_used")
         if (isinstance(instrument_id, bool) or not isinstance(instrument_id, int)
                 or instrument_id not in rows["Instruments"]):
@@ -96,13 +107,13 @@ def profile_snapshot(records, published, base, generated_at):
             filename = safe_filename(ms.get("filename"))
             if filename is None:
                 unavailable_filenames += 1
-            profiles.append([ms["id"], field_id, instrument_id, status, filename])
+            profiles.append([ms["id"], field_id, instrument_id, status, filename, method_id])
     if len(profiles) + sum(excluded.values()) != len(rows["MS_Data"]):
         raise ValueError("MS_Data export counts do not reconcile")
     return {
         "source": base.rstrip("/") + "/items/", "generated_at": generated_at,
-        "method": "Directus FK lineage: Field_Data.sample_id = Containers.container_id or Dried_Samples_Data.field_data -> sample_container; Extraction_Data.parent_sample_container -> sample_container; Aliquoting_Data.parent_sample_container -> sample_container; MS_Data.parent_sample_container -> container. Field_Data IDs, sample_id and taxon_ref must agree with published samples.json. Only status OK/published and nonempty uuid_ms_file indicates a recorded MS file, not QC success; instrument_used links to Instruments. A safe MS_Data filename basename is published as recorded; unsafe or missing filenames remain null and count as unavailable without removing the MS profile. Exclusions are mutually exclusive in status, file, unlinked lineage, outside published snapshot order.",
-        "instruments": instruments, "profiles": profiles,
+        "method": "Directus FK lineage: Field_Data.sample_id = Containers.container_id or Dried_Samples_Data.field_data -> sample_container; Extraction_Data.parent_sample_container -> sample_container; Aliquoting_Data.parent_sample_container -> sample_container; MS_Data.parent_sample_container -> container. Field_Data IDs, sample_id and taxon_ref must agree with published samples.json. Only status OK/published and nonempty uuid_ms_file indicates a recorded MS file, not QC success; instrument_used links to Instruments and injection_method links to Injection_Methods.polarity. Only recorded positive/negative polarity is displayed; null is unknown. A safe MS_Data filename basename is published as recorded; unsafe or missing filenames remain null and count as unavailable without removing the MS profile. Exclusions are mutually exclusive in status, file, unlinked lineage, outside published snapshot order.",
+        "instruments": instruments, "injection_methods": methods, "profiles": profiles,
         "total_ms_records": len(rows["MS_Data"]),
         "gnps_filenames_unavailable": unavailable_filenames, **excluded,
     }

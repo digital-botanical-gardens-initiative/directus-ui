@@ -24,7 +24,7 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../processing.js");
+require("../assets/js/processing.js");
 const {buildIndex, render} = window.DBGIProcessing;
 const base = "https://emi-collection.unifr.ch/directus";
 const columns = ["kind", "id", "field_id", "container_id", "container_label", "parent_container_id", "status"];

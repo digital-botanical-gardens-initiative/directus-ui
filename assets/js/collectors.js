@@ -349,7 +349,7 @@
       const table = node("table");
       const tableHead = node("thead");
       const headingRow = node("tr");
-      for (const title of ["Sample ID", "Observation subject", "Resolved CoL species", "Field name", "Project", "Collection date", "Directus"]) {
+      for (const title of ["Sample ID", "Observation subject", "Resolved CoL species", "Project", "Collection date"]) {
         const cell = node("th", null, title);
         cell.setAttribute("scope", "col");
         headingRow.append(cell);
@@ -492,15 +492,8 @@
             renderScientificTaxon(link, taxon);
             speciesCell.append(link);
           } else speciesCell.textContent = "—";
-          const directusCell = node("td");
-          const directusLink = node("a", null, "Open ↗");
-          directusLink.href = sourceUrl;
-          directusLink.target = "_blank";
-          directusLink.rel = "noopener noreferrer";
-          directusCell.append(directusLink);
           record.append(sampleCell, window.DBGIObservationSubject.cell(row[9]), speciesCell,
-            node("td", null, row[3] || "—"), node("td", null, row[2] || "—"),
-            node("td", null, row[6] || "—"), directusCell);
+            node("td", null, row[2] || "—"), node("td", null, row[6] || "—"));
           tableRows.push(record);
         }
         if (!cards.length) cards.push(node("li", "collectors__message", "No matching field samples."));

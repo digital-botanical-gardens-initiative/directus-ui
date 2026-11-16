@@ -18,7 +18,7 @@ class Node {
 
 global.document = {createElement: tag => new Node(tag), createElementNS: (_ns, tag) => new Node(tag)};
 global.window = {};
-require("../sample_subject.js");
+require("../assets/js/sample_subject.js");
 const {show} = window.DBGIObservationSubject;
 
 test("recorded leaf, flower, root and other plant parts retain distinct source values and icon paths", () => {

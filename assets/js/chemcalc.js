@@ -11,12 +11,14 @@ window.ChemCalc = (() => {
     return node;
   }
 
-  function render(root) {
+  function render(root, {comparison = false} = {}) {
     // Unload the previous formula's external page on navigation.
     root.replaceChildren();
     const panel = element("div", root, null, "chemcalc-panel");
     element("h3", panel, "Calculate an adduct m/z");
-    element("p", panel, "Paste a molecular formula from LOTUS, not its neutral mass. ChemCalc calculates the ion m/z; use it in the GNPS2 XIC search on a profiled field sample. An XIC peak alone does not identify a compound.");
+    element("p", panel, comparison
+      ? "Paste a molecular formula from LOTUS, not its neutral mass. Copy the calculated ion m/z into Plot XIC in GNPS2 below for the selected comparison files. An XIC peak alone does not identify a compound."
+      : "Paste a molecular formula from LOTUS, not its neutral mass. ChemCalc calculates the ion m/z; use it in the GNPS2 XIC search on a profiled field sample. An XIC peak alone does not identify a compound.");
 
     const form = element("form", panel, null, "chemcalc-form");
     const formulaLabel = element("label", form, "Molecular formula from LOTUS");

@@ -19,8 +19,10 @@ window.MSProfile = (() => {
 
   function buildIndex(snapshot, rowsById, taxaById) {
     if (snapshot?.source !== source || !Array.isArray(snapshot.instruments) ||
-        !Array.isArray(snapshot.profiles) || !(rowsById instanceof Map) ||
-        !(taxaById instanceof Map)) throw new Error("Invalid Directus MS profile snapshot");
+        !Array.isArray(snapshot.injection_methods) || !Array.isArray(snapshot.profiles) ||
+        !(rowsById instanceof Map) || !(taxaById instanceof Map)) {
+      throw new Error("Invalid Directus MS profile snapshot");
+    }
 
     const instruments = new Map();
     for (const entry of snapshot.instruments) {
@@ -31,16 +33,25 @@ window.MSProfile = (() => {
       }
       instruments.set(entry[0], {id: entry[0], code: entry[1], model: entry[2]});
     }
+    const injectionMethods = new Map();
+    for (const entry of snapshot.injection_methods) {
+      if (!Array.isArray(entry) || entry.length !== 2 || !validId(entry[0]) ||
+          !["positive", "negative", null].includes(entry[1]) || injectionMethods.has(entry[0])) {
+        throw new Error("Invalid or duplicate Directus injection method");
+      }
+      injectionMethods.set(entry[0], entry[1]);
+    }
 
     const byField = new Map();
     const bySpecies = new Map();
     const speciesByField = new Map();
     const seenMS = new Set();
     for (const entry of snapshot.profiles) {
-      if (!Array.isArray(entry) || entry.length !== 5 || !validId(entry[0]) ||
+      if (!Array.isArray(entry) || entry.length !== 6 || !validId(entry[0]) ||
           !validId(entry[1]) || !validId(entry[2]) ||
           !["OK", "published"].includes(entry[3]) || seenMS.has(entry[0]) ||
           !instruments.has(entry[2]) ||
+          (entry[5] !== null && (!validId(entry[5]) || !injectionMethods.has(entry[5]))) ||
           (entry[4] !== null && (typeof entry[4] !== "string" || !entry[4].trim() ||
             entry[4] === "." || entry[4] === ".." || /[/\\\x00-\x1f\x7f]/.test(entry[4])))) {
         throw new Error("Invalid or duplicate MS profile record");
@@ -68,7 +79,7 @@ window.MSProfile = (() => {
         group.instrumentIds.add(entry[2]);
       }
     }
-    return {instruments, byField, bySpecies, rowsById};
+    return {instruments, injectionMethods, byField, bySpecies, rowsById};
   }
 
   function element(tag, className, parent, text) {
@@ -88,6 +99,18 @@ window.MSProfile = (() => {
     anchor.referrerPolicy = "no-referrer";
     anchor.setAttribute("aria-label", `${description} (opens in a new tab)`);
     return anchor;
+  }
+
+  function appendPolarity(parent, profile, injectionMethods) {
+    const id = profile?.[5];
+    if (!validId(id) || !(injectionMethods instanceof Map)) return null;
+    const polarity = injectionMethods.get(id);
+    if (polarity !== "positive" && polarity !== "negative") return null;
+    const badge = element("span", `ms-polarity-badge ms-polarity-badge--${polarity}`,
+      parent, polarity === "positive" ? "+" : "−");
+    badge.title = `${polarity === "positive" ? "Positive" : "Negative"} ionization · Directus Injection_Methods #${id}`;
+    badge.setAttribute("aria-label", badge.title);
+    return badge;
   }
 
   function render(root, {row, taxaById, index, directusBase} = {}) {
@@ -143,6 +166,7 @@ window.MSProfile = (() => {
         if (position) sample.append(" · ");
         itemLink(sample, directusBase, "MS_Data", record[0], `MS_Data #${record[0]}`,
           `Open MS_Data record ${record[0]} for this field sample in Directus`);
+        appendPolarity(sample, record, index.injectionMethods);
       });
     } else if (species && index.bySpecies.has(species[0])) {
       element("p", "ms-profile-sample", root,
@@ -150,5 +174,5 @@ window.MSProfile = (() => {
     }
   }
 
-  return Object.freeze({buildIndex, render});
+  return Object.freeze({buildIndex, render, appendPolarity});
 })();

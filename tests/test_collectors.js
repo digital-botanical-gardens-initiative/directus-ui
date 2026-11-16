@@ -24,9 +24,9 @@ class Node {
 global.Element = Node;
 global.document = {createElement: tag => new Node(tag), createElementNS: (_namespace, tag) => new Node(tag)};
 global.window = {};
-require("../sample_subject.js");
-require("../collector_map.js");
-require("../collectors.js");
+require("../assets/js/sample_subject.js");
+require("../assets/js/collector_map.js");
+require("../assets/js/collectors.js");
 const {create} = window.DBGICollectors;
 const base = "https://example.test/directus";
 const ids = Array.from({length: 82}, (_, index) => index + 1);
@@ -305,8 +305,12 @@ test("collector list has a dedicated source-subject column and filters the full 
   const list = detailRoot.byClass("collectors__list-panel")[0];
   const columns = list.findAll("thead")[0].findAll("th");
   assert.equal(columns[1].textContent, "Observation subject");
+  assert.deepEqual(columns.map(column => column.textContent),
+    ["Sample ID", "Observation subject", "Resolved CoL species", "Project", "Collection date"]);
   const rows = list.findAll("tbody")[0].findAll("tr");
   assert.equal(rows.length, 2);
+  assert.equal(rows[0].findAll("td").length, columns.length);
+  assert.equal(rows[0].findAll("a").every(link => !link.href?.includes("/admin/content/Field_Data/")), true);
   assert.equal(rows[0].findAll("td")[0].findAll("svg").length, 0);
   assert.equal(rows[0].findAll("td")[1].byClass("sample-subject__mark")[0].attributes["aria-label"], "Observation subject: Flower");
   assert.equal(rows[1].findAll("td")[1].textContent, "—");

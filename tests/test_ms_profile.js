@@ -20,8 +20,8 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../scientific_names.js");
-require("../ms_profile.js");
+require("../assets/js/scientific_names.js");
+require("../assets/js/ms_profile.js");
 const {buildIndex, render} = window.MSProfile;
 const directusBase = "https://emi-collection.unifr.ch/directus";
 const source = `${directusBase}/items/`;
@@ -40,8 +40,9 @@ const fields = [
 const rowsById = new Map(fields.map((row) => [row[0], row]));
 const snapshot = {source, generated_at: "2026-11-14T00:00:00Z", method: "container lineage",
   instruments: [[2, "inst_000002", "LC-MS QExactive HFX"], [3, "inst_000003", "Orbitrap Exploris"]],
-  profiles: [[100, 10, 2, "published", "one.mzML"], [101, 10, 3, "OK", "two.mzML"],
-    [102, 11, 2, "OK", null], [103, 14, 3, "OK", "four.mzML"]],
+  injection_methods: [[10, "positive"], [11, "negative"], [12, null]],
+  profiles: [[100, 10, 2, "published", "one_neg.mzML", 10], [101, 10, 3, "OK", "two_pos.mzML", 11],
+    [102, 11, 2, "OK", null, 12], [103, 14, 3, "OK", "four.mzML", null]],
   total_ms_records: 4, excluded_unlinked_ms: 0, excluded_outside_snapshot_ms: 0,
   excluded_without_file_ms: 0, excluded_other_status_ms: 0};
 const index = buildIndex(snapshot, rowsById, taxaById);
@@ -50,7 +51,7 @@ const show = (root, row, idx = index, map = taxaById) =>
 
 test("species ancestor combines distinct field samples but never presents another sample's MS files as this one's", () => {
   assert.deepEqual(index.byField.get(10), snapshot.profiles.slice(0, 2));
-  assert.deepEqual(index.byField.get(10).map((record) => record[4]), ["one.mzML", "two.mzML"]);
+  assert.deepEqual(index.byField.get(10).map((record) => record[4]), ["one_neg.mzML", "two_pos.mzML"]);
   assert.equal(index.byField.get(11)[0][4], null);
   const root = new Node("aside");
   show(root, fields[1]);
@@ -63,6 +64,10 @@ test("species ancestor combines distinct field samples but never presents anothe
   assert.equal(root.findAll("a").filter((link) => link.href.includes("/MS_Data/")).length, 2);
   assert.match(root.textContent, /This field sample: 2 linked MS files/);
   assert.equal(root.findAll("a").some((link) => link.href.endsWith("/MS_Data/102")), false);
+  assert.deepEqual(root.findAll("span").filter((span) => span.className?.startsWith("ms-polarity-badge"))
+    .map((badge) => [badge.textContent, badge.title]),
+    [["+", "Positive ionization · Directus Injection_Methods #10"],
+      ["−", "Negative ionization · Directus Injection_Methods #11"]]);
 });
 
 test("multiple physical instruments render separate safe Directus links with model and code", () => {
@@ -122,16 +127,22 @@ test("different species, unresolved taxa and missing snapshot return distinct ne
 test("malformed source, unknown instruments, duplicate MS ids, and stale Field_Data/Taxa references fail closed", () => {
   const broken = (changes) => ({...snapshot, ...changes});
   assert.throws(() => buildIndex(broken({source: "https://other.example/items/"}), rowsById, taxaById), /snapshot/);
-  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 99, "OK", "one.mzML"]]}), rowsById, taxaById), /profile/);
-  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK", "one.mzML"],
-    [100, 11, 2, "OK", "two.mzML"]]}), rowsById, taxaById), /duplicate/);
+  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 99, "OK", "one.mzML", 10]]}), rowsById, taxaById), /profile/);
+  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK", "one.mzML", 10],
+    [100, 11, 2, "OK", "two.mzML", 11]]}), rowsById, taxaById), /duplicate/);
   assert.throws(() => buildIndex(broken({instruments: [...snapshot.instruments, snapshot.instruments[0]]}), rowsById, taxaById), /duplicate/);
-  assert.throws(() => buildIndex(broken({profiles: [[100, 999, 2, "OK", null]]}), rowsById, taxaById), /Field_Data/);
-  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "pending", null]]}), rowsById, taxaById), /profile/);
+  assert.throws(() => buildIndex(broken({profiles: [[100, 999, 2, "OK", null, 10]]}), rowsById, taxaById), /Field_Data/);
+  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "pending", null, 10]]}), rowsById, taxaById), /profile/);
   for (const filename of ["../other.mzML", "folder/file.mzML", "folder\\file.mzML", "", "..", 123]) {
-    assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK", filename]]}),
+    assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK", filename, 10]]}),
       rowsById, taxaById), /profile/);
   }
+  assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK", "one.mzML", 999]]}),
+    rowsById, taxaById), /profile/);
+  assert.throws(() => buildIndex(broken({injection_methods: [[10, "positive"], [10, "negative"]]}),
+    rowsById, taxaById), /injection method/);
+  assert.throws(() => buildIndex(broken({injection_methods: [[10, "unknown"]]}),
+    rowsById, taxaById), /injection method/);
   assert.throws(() => buildIndex(broken({profiles: [[100, 10, 2, "OK"]]}),
     rowsById, taxaById), /profile/);
   const stale = new Map(rowsById).set(10, [...fields[0].slice(0, 7), 999, "resolved"]);
@@ -151,7 +162,7 @@ test("dynamic navigation clears previous species instruments and MS links; sourc
   const injected = [8, "COL-X", "<img src=x onerror=alert(1)>", null, "species", 1, "2026"];
   const field = [18, "dbgi_000018", "P", null, null, null, null, 8, "resolved"];
   const snapshotX = {...snapshot, instruments: [[9, "<script>console.log(1)</script>", "Model <b>test</b>"]],
-    profiles: [[1000, 18, 9, "OK", "<img src=x onerror=alert(1)>.mzML"]]};
+    profiles: [[1000, 18, 9, "OK", "<img src=x onerror=alert(1)>.mzML", null]]};
   const map = new Map(taxaById).set(8, injected);
   render(root, {row: field, taxaById: map, index: buildIndex(snapshotX, new Map([[18, field]]), map), directusBase});
   assert.match(root.textContent, /<img src=x onerror=alert\(1\)>/);

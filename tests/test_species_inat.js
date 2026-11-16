@@ -18,7 +18,7 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../species_inat.js");
+require("../assets/js/species_inat.js");
 const {render} = window.SpeciesINat;
 const species = [1077, "4TR9P", "Ruscus aculeatus", "L.", "species", null, "2026"];
 const unmapped = [3153, "UNMAPPED", "Alchemilla fissa", null, "species", null, "2026"];

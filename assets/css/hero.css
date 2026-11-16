@@ -31,7 +31,7 @@
   animation: hero-banner-drift 48s ease-in-out infinite alternate;
 }
 .hero-scene--metasequoia {
-  background-image: url("assets/dbgi-metasequoia.webp");
+  background-image: url("../dbgi-metasequoia.webp");
   background-position: center 46%;
 }
 @keyframes hero-banner-drift {

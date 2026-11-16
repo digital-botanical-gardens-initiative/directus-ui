@@ -24,8 +24,8 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../scientific_names.js");
-require("../inaturalist.js");
+require("../assets/js/scientific_names.js");
+require("../assets/js/inaturalist.js");
 const inat = global.window.INaturalist;
 const columns = ["sample_id", "field_id", "observation_id", "observer_taxon_id", "observer_name", "observer_rank",
   "community_taxon_id", "community_name", "community_rank", "col_id", "col_name", "col_rank", "status", "reason", "photos",

@@ -23,9 +23,11 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../gnps_dashboard.js");
+require("../assets/js/gnps_dashboard.js");
+require("../assets/js/ms_profile.js");
 const {render} = window.GNPSDashboard;
-const profile = (id, filename, instrumentId = 7) => [id, 1195, instrumentId, "OK", filename];
+const profile = (id, filename, instrumentId = 7, methodId = null) =>
+  [id, 1195, instrumentId, "OK", filename, methodId];
 const first = "20240307_EB_dbgi_001195_01_01";
 const usi = `mzspec:MSV000102993:${first}.mzML`;
 const expected = `https://dashboard2.gnps2.org/?usi=${encodeURIComponent(usi)}&tic_option=BPI#${encodeURIComponent(JSON.stringify({usi, usi2: ""}))}`;
@@ -59,6 +61,17 @@ test("one Directus file embeds the BPI GNPS view immediately and provides the sa
   assert.match(frame.title, new RegExp(first));
   preview.dispatch("toggle");
   assert.equal(root.findAll("iframe")[0], frame, "initial toggle must not reload the iframe");
+});
+
+test("GNPS per-analysis chooser shows source method polarity independent of the filename", () => {
+  const root = new Node("section");
+  render(root, {profiles: [profile(1, "first_neg.mzML", 7, 10),
+    profile(2, "second_pos.mzML", 7, 11), profile(3, "unknown.mzML", 7, 12)],
+  injectionMethods: new Map([[10, "positive"], [11, "negative"], [12, null]])});
+  assert.deepEqual(root.findAll("span").filter((span) => span.className?.startsWith("ms-polarity-badge"))
+    .map((badge) => [badge.textContent, badge.title]),
+    [["+", "Positive ionization · Directus Injection_Methods #10"],
+      ["−", "Negative ionization · Directus Injection_Methods #11"]]);
 });
 
 test("selecting two files compares them in both URLs; errors, collapse and selection keep the view truthful", () => {
@@ -232,12 +245,35 @@ test("ChemCalc m/z plots the selected field sample's XIC and rejects unsafe mass
   assert.equal(source(root.findAll("iframe")[0].src).has("xicmz"), false);
 });
 
+test("shared selection places multiple files in two independent GNPS2 USI groups", () => {
+  const root = new Node("section");
+  const files = [profile(11, "first.mzML"), profile(12, "second.mzML"),
+    profile(13, "third.mzML"), profile(14, "fourth.mzML")];
+  const groups = new Map([[11, "A"], [12, "A"], [13, "B"], [14, "B"]]);
+  render(root, {profiles: files, selectedIds: [11, 12, 13, 14], groupById: groups});
+  const link = root.findAll("a")[0];
+  const url = new URL(link.href);
+  const firstGroup = ["first.mzML", "second.mzML"].map((name) => `mzspec:MSV000102993:${name}`).join("\n");
+  const secondGroup = ["third.mzML", "fourth.mzML"].map((name) => `mzspec:MSV000102993:${name}`).join("\n");
+  assert.equal(url.searchParams.get("usi"), firstGroup);
+  assert.equal(url.searchParams.get("usi2"), secondGroup);
+  assert.equal(url.searchParams.get("tic_overlay"), "1");
+  assert.equal(url.searchParams.get("tic_option"), "BPI");
+  assert.deepEqual(JSON.parse(decodeURIComponent(url.hash.slice(1))), {usi: firstGroup, usi2: secondGroup});
+  assert.equal(root.findAll("iframe")[0].src, link.href);
+  assert.match(root.findAll("iframe")[0].title, /group A.*group B/);
+  groups.set(11, "B"); groups.set(12, "B");
+  render(root, {profiles: files, selectedIds: [11, 12, 13, 14], groupById: groups});
+  assert.equal(root.hidden, true, "a B-only selection cannot invent the required primary USI");
+  assert.equal(root.findAll("iframe").length, 0);
+});
+
 test("explicit MS_Data IDs preselect all requested records across different fields without a chooser", () => {
   const root = new Node("section");
-  const profiles = [[11, 401, 7, "OK", "oak.mzML"],
-    [12, 902, 7, "published", "spruce.mzML"],
-    [13, 1004, 8, "OK", "birch.mzML"],
-    [14, 1004, 8, "OK", "unsafe.raw"]];
+  const profiles = [[11, 401, 7, "OK", "oak.mzML", null],
+    [12, 902, 7, "published", "spruce.mzML", null],
+    [13, 1004, 8, "OK", "birch.mzML", null],
+    [14, 1004, 8, "OK", "unsafe.raw", null]];
   render(root, {profiles, selectedIds: [11, 12, 13, 14, 999]});
   assert.equal(root.findAll("input").filter((node) => node.type === "checkbox").length, 0);
   assert.equal(root.findAll("a")[0].href, view(["oak.mzML", "spruce.mzML", "birch.mzML"]));

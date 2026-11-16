@@ -60,6 +60,7 @@ let treemapSelected = null;
 let selectedTreemapTaxa = null;
 let collectorsView;
 let collectorsPromise;
+let networkController;
 
 function element(tag, text, parent, className) {
   const node = document.createElement(tag);
@@ -155,36 +156,56 @@ function itemLink(parent, collection, id, label, ariaLabel) {
   link.rel = "noopener noreferrer";
   link.setAttribute("aria-label", ariaLabel);
 }
-function sampleFilterLink(parent, label, {project = "", family = "", map = false} = {}) {
+function browseSampleScope({project = "", family = "", subject = "", map = false} = {}) {
+  selectedTaxonId = null;
+  selectedTreemapTaxa = null;
+  $("query").value = "";
+  $("project").value = project;
+  $("family-query").value = family;
+  $("subject-filter").value = subject ? `value:${subject.trim().toLocaleLowerCase()}` : "";
+  sampleView = map ? "map" : "cards";
+  filter();
+}
+function sampleFilterLink(parent, label, scope = {}) {
   const link = element("a", label, parent);
   link.href = "#samples";
-  link.addEventListener("click", () => {
-    selectedTaxonId = null;
-    selectedTreemapTaxa = null;
-    $("query").value = "";
-    $("project").value = project;
-    $("family-query").value = family;
-    $("subject-filter").value = "";
-    sampleView = map ? "map" : "cards";
-    filter();
-  });
+  link.addEventListener("click", () => browseSampleScope(scope));
   return link;
 }
 
 
-function addMSCompareButton(parent, row, label = "Add MS files to comparison") {
-  if (!msProfileIndex || !window.MSCompare.hasField(row[0], msProfileIndex)) return false;
-  const button = element("button", label, parent, "compare-ms-add");
-  button.type = "button";
-  button.addEventListener("click", () => {
-    window.MSCompare.addField(row[0], msProfileIndex);
-    location.hash = "#compare-ms";
-  });
+function addMSCompareToggles(parent, row) {
+  const profiles = window.MSCompare.filesForField(row[0], msProfileIndex);
+  if (!profiles.length) return false;
+  const controls = element("div", "", parent, "compare-ms-toggles");
+  for (const profile of profiles) {
+    const label = element("label", "", controls, "compare-ms-toggle");
+    const input = element("input", "", label);
+    input.type = "checkbox";
+    input.dataset.compareId = String(profile[0]);
+    input.checked = window.MSCompare.isSelected(profile[0]);
+    const methodId = profile[5];
+    const polarity = msProfileIndex.injectionMethods.get(methodId);
+    input.title = `MS_Data #${profile[0]} · ${window.GNPSDashboard.mzmlName(profile[4])}` +
+      (polarity ? ` · ${polarity} ionization (Injection_Methods #${methodId})` : "");
+    label.title = input.title;
+    input.setAttribute("aria-label", `Compare ${row[1]} ${input.title}`);
+    label.append(`#${profile[0]}`);
+    window.MSProfile.appendPolarity(label, profile, msProfileIndex.injectionMethods);
+    input.addEventListener("change", () => {
+      if (input.checked) window.MSCompare.selectFile(row[0], profile[0], msProfileIndex);
+      else window.MSCompare.removeFile(row[0], profile[0], msProfileIndex);
+      for (const checkbox of document.querySelectorAll(`[data-compare-id="${profile[0]}"]`)) checkbox.checked = input.checked;
+    });
+  }
   return true;
 }
 
 function show(view) {
-  if (view !== "compare-ms") $("compare-ms-root").replaceChildren();
+  if (view !== "compare-ms") {
+    $("compare-ms-root").replaceChildren();
+    window.MSCompare.unmount();
+  }
   if (view !== "collector") collectorsView?.hide();
   if (view !== "detail") {
     $("sample-map").removeAttribute("src");
@@ -201,8 +222,6 @@ function show(view) {
   if (view !== "species") {
     $("species-metabolome").replaceChildren();
     $("species-metabolome").hidden = true;
-    $("species-chemcalc").replaceChildren();
-    $("species-chemcalc").hidden = true;
   }
   if (view !== "species") $("species-col").replaceChildren();
   if (view !== "species") {
@@ -228,7 +247,7 @@ function show(view) {
   if ((view === "detail" || view === "inaturalist") && !inaturalistPromise) {
     inaturalistPromise = loadInaturalist();
   }
-  if ((view === "detail" || view === "species") && !wikidataPromise) wikidataPromise = loadWikidataTaxa();
+  if (["detail", "species", "compare-ms"].includes(view) && !wikidataPromise) wikidataPromise = loadWikidataTaxa();
   if (["detail", "species", "taxon", "samples", "compare-ms"].includes(view) && !msProfilePromise) msProfilePromise = loadMSProfiles();
   if (["detail", "species", "taxon", "samples"].includes(view) && !processingPromise) processingPromise = loadProcessing();
 }
@@ -348,6 +367,20 @@ function route() {
     $("status").textContent = "";
     show("compare-ms");
     renderMSCompare();
+    setTimeout(() => scrollTo(0, 0), 0);
+    return;
+  }
+  if (hash === "network") {
+    $("status").textContent = "";
+    show("network");
+    try {
+      if (!networkController) networkController = window.DBGISampleNetwork.mount($("network-root"),
+        {rows, taxaById, gardens: gardenCatalog, directusBase, onBrowse: browseSampleScope});
+      networkController.resize();
+    } catch (error) {
+      $("network-root").replaceChildren();
+      element("p", `Sample network unavailable: ${error.message}`, $("network-root"), "muted");
+    }
     setTimeout(() => scrollTo(0, 0), 0);
     return;
   }
@@ -810,14 +843,12 @@ function renderSampleTableRow(body, row) {
   const taxonLink = resolved ? element("a", "", taxonCell) : taxonCell;
   scientificTaxon(taxonLink, resolved);
   if (resolved) taxonLink.href = taxonHref(resolved);
-  element("td", row[3] || "—", tr);
   element("td", familyOf(row[7])?.[2] || "—", tr);
   element("td", projectName(row[2]), tr);
   element("td", displayCollectionDate(row[6]), tr);
   renderSampleStages(row, element("td", "", tr));
   const compareCell = element("td", "", tr);
-  addMSCompareButton(compareCell, row, "Add files ↗");
-  itemLink(element("td", "", tr), "Field_Data", row[0], "Open ↗", `Open ${row[1]} in Directus`);
+  if (!addMSCompareToggles(compareCell, row)) compareCell.textContent = "—";
 }
 function renderSampleStages(row, parent) {
   const badges = element("div", "", parent, "stage-badges");
@@ -854,7 +885,6 @@ function renderSpecies(taxon) {
   applySpeciesFilters(false);
   renderSpeciesMetabolome(taxon);
   window.SpeciesINat.render($("species-inat"), {taxon, mapping: wikidataTaxa});
-  window.ChemCalc.render($("species-chemcalc"));
 }
 
 function renderUpperTaxon(taxon) {
@@ -994,7 +1024,7 @@ function renderFieldSampleCard(cards, row) {
   } else {
     element("p", processingError ? "Processing snapshot unavailable." : "Checking downstream records…", card, "muted");
   }
-  addMSCompareButton(card, row);
+  addMSCompareToggles(card, row);
   itemLink(card, "Field_Data", row[0], `Directus Field_Data #${row[0]} ↗`, `Open field sample ${row[1]} in Directus`);
 }
 
@@ -1406,6 +1436,7 @@ async function loadWikidataTaxa() {
       if (taxon?.[4] === "species") renderSpeciesMetabolome(taxon);
       if (taxon?.[4] === "species") window.SpeciesINat.render($("species-inat"), {taxon, mapping: wikidataTaxa});
     }
+    if (!$("compare-ms-view").hidden) window.MSCompare.updateMapping(wikidataTaxa);
   } catch (error) {
     console.warn("Wikidata species links unavailable:", error);
   }
@@ -1414,7 +1445,7 @@ async function loadWikidataTaxa() {
 function renderMSCompare() {
   const root = $("compare-ms-root");
   root.replaceChildren();
-  if (msProfileIndex) window.MSCompare.render(root, {index: msProfileIndex, rowsById: byId, taxaById, directusBase});
+  if (msProfileIndex) window.MSCompare.render(root, {index: msProfileIndex, rowsById: byId, taxaById, directusBase, mapping: wikidataTaxa});
   else element("p", msProfileError ? "Directus MS profiling snapshot unavailable." :
     "Loading Directus MS profiling records…", root, "muted");
 }
@@ -1424,7 +1455,10 @@ function renderMSDetail(row) {
   root.replaceChildren();
   if (msProfileIndex) {
     window.MSProfile.render(root, {row, taxaById, index: msProfileIndex, directusBase});
-    addMSCompareButton(root, row, "Add this sample’s MS files to comparison");
+    if (addMSCompareToggles(root, row)) {
+      const compare = element("a", "Open MS comparison →", root, "compare-ms-open");
+      compare.href = "#compare-ms";
+    }
   } else {
     element("span", msProfileError ? "MS profiling snapshot unavailable." : "Checking MS profiles…", root, "muted");
   }
@@ -1433,7 +1467,7 @@ function renderMSDetail(row) {
 function renderGNPSDetail(row) {
   const profiles = msProfileIndex?.byField.get(row[0]) || [];
   const gnps = $("sample-gnps");
-  window.GNPSDashboard.render(gnps, {profiles});
+  window.GNPSDashboard.render(gnps, {profiles, injectionMethods: msProfileIndex?.injectionMethods});
   const calculator = $("sample-chemcalc");
   calculator.replaceChildren();
   calculator.hidden = true;

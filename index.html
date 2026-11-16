@@ -5,42 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Explore DBGI samples collected in Directus, by project and taxon.">
   <title>DBGI · Sample explorer</title>
-  <link rel="stylesheet" href="styles.css?v=4">
-  <link rel="stylesheet" href="refresh_status.css?v=1">
-  <link rel="stylesheet" href="hero.css?v=2">
-  <link rel="stylesheet" href="garden_progress.css">
-  <link rel="stylesheet" href="garden_badges.css">
-  <link rel="stylesheet" href="sample_weather.css">
-  <link rel="stylesheet" href="sample_subject.css?v=3">
-  <link rel="stylesheet" href="inaturalist.css?v=4">
-  <link rel="stylesheet" href="metabolome.css?v=3">
-  <link rel="stylesheet" href="chemcalc.css">
-  <link rel="stylesheet" href="ms_profile.css">
-  <link rel="stylesheet" href="gnps_dashboard.css?v=3">
-  <link rel="stylesheet" href="ms_compare.css?v=1">
-  <link rel="stylesheet" href="species.css?v=6">
-  <link rel="stylesheet" href="collectors.css?v=5">
-  <link rel="stylesheet" href="processing.css">
-  <script src="garden_progress.js" defer></script>
-  <script src="garden_badges.js" defer></script>
-  <script src="sample_weather.js" defer></script>
-  <script src="sample_subject.js?v=3" defer></script>
-  <script src="refresh_status.js?v=2" defer></script>
-  <script src="scientific_names.js" defer></script>
-  <script src="species_inat.js?v=2" defer></script>
-  <script src="inaturalist.js?v=4" defer></script>
-  <script src="metabolome.js?v=3" defer></script>
-  <script src="chemcalc.js" defer></script>
-  <script src="ms_profile.js" defer></script>
-  <script src="gnps_dashboard.js?v=4" defer></script>
-  <script src="ms_compare.js?v=2" defer></script>
-  <script src="processing.js" defer></script>
-  <script src="collector_map.js?v=4" defer></script>
-  <script src="collectors.js?v=7" defer></script>
-  <script src="app.js?v=15" defer></script>
+  <link rel="stylesheet" href="assets/css/styles.css?v=5">
+  <link rel="stylesheet" href="assets/css/refresh_status.css?v=1">
+  <link rel="stylesheet" href="assets/css/hero.css?v=2">
+  <link rel="stylesheet" href="assets/css/garden_progress.css">
+  <link rel="stylesheet" href="assets/css/garden_badges.css">
+  <link rel="stylesheet" href="assets/css/sample_weather.css">
+  <link rel="stylesheet" href="assets/css/sample_subject.css?v=3">
+  <link rel="stylesheet" href="assets/css/inaturalist.css?v=4">
+  <link rel="stylesheet" href="assets/css/metabolome.css?v=3">
+  <link rel="stylesheet" href="assets/css/chemcalc.css">
+  <link rel="stylesheet" href="assets/css/ms_profile.css?v=3">
+  <link rel="stylesheet" href="assets/css/gnps_dashboard.css?v=3">
+  <link rel="stylesheet" href="assets/css/ms_compare.css?v=4">
+  <link rel="stylesheet" href="assets/css/sample_network.css?v=2">
+  <link rel="stylesheet" href="assets/css/species.css?v=6">
+  <link rel="stylesheet" href="assets/css/collectors.css?v=5">
+  <link rel="stylesheet" href="assets/css/processing.css">
+  <script src="assets/js/garden_progress.js" defer></script>
+  <script src="assets/js/garden_badges.js" defer></script>
+  <script src="assets/js/sample_weather.js" defer></script>
+  <script src="assets/js/sample_subject.js?v=3" defer></script>
+  <script src="assets/js/refresh_status.js?v=2" defer></script>
+  <script src="assets/js/scientific_names.js" defer></script>
+  <script src="assets/js/species_inat.js?v=2" defer></script>
+  <script src="assets/js/inaturalist.js?v=4" defer></script>
+  <script src="assets/js/metabolome.js?v=4" defer></script>
+  <script src="assets/js/chemcalc.js?v=2" defer></script>
+  <script src="assets/js/ms_profile.js?v=2" defer></script>
+  <script src="assets/js/gnps_dashboard.js?v=7" defer></script>
+  <script src="assets/js/ms_compare.js?v=7" defer></script>
+  <script src="assets/js/processing.js" defer></script>
+  <script src="assets/js/collector_map.js?v=4" defer></script>
+  <script src="assets/js/collectors.js?v=9" defer></script>
+  <script src="assets/js/sample_network.js?v=8" defer></script>
+  <script src="assets/js/app.js?v=22" defer></script>
 </head>
 <body>
-  <header class="top"><div class="wrap header-inner"><a class="brand" href="#home"><img src="assets/dbgi-portal-logo.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a><nav aria-label="Main navigation"><a href="#home">Overview</a><a href="#samples">Samples</a><a href="#explore">Explore</a><a href="#collectors">Collectors</a><a href="#compare-ms">Compare MS</a><a href="#treemap">Treemap</a><a href="#inaturalist">iNaturalist review</a></nav></div></header>
+  <header class="top"><div class="wrap header-inner"><a class="brand" href="#home"><img src="assets/dbgi-icon.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a><nav aria-label="Main navigation"><a href="#home">Overview</a><a href="#samples">Samples</a><a href="#explore">Explore</a><a href="#network">Network</a><a href="#collectors">Collectors</a><a href="#compare-ms">Compare MS</a><a href="#treemap">Treemap</a><a href="#inaturalist">iNaturalist review</a></nav></div></header>
   <main>
     <section class="hero"><div class="hero-scenes" aria-hidden="true"><span class="hero-scene hero-scene--metasequoia"></span></div><div class="wrap hero-inner"><p class="eyebrow">Digital Botanical Gardens Initiative</p><h1>Explore the living collection.</h1><p>Find a botanical sample, browse projects, and follow its recorded identity and location. A read-only view of Directus field data.</p><form id="hero-search" class="hero-search"><label class="sr-only" for="hero-query">Search samples</label><input id="hero-query" placeholder="Sample ID or taxon, e.g. Lonicera" autocomplete="off"><button type="submit">Search samples →</button></form></div></section>
     <div class="wrap body-wrap"><p id="status" role="status" aria-live="polite">Loading samples…</p>
@@ -61,7 +63,7 @@
         <div class="view-switch" role="group" aria-label="Sample display"><button id="view-cards" type="button" aria-pressed="true">Cards</button><button id="view-list" type="button" aria-pressed="false">List</button><button id="view-map" type="button" aria-pressed="false">Map</button></div>
         <div id="cards-panel"><div id="sample-cards" class="species-cards"></div></div>
         <div id="list-panel" hidden>
-          <div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="sample-rows"></tbody></table></div>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th></tr></thead><tbody id="sample-rows"></tbody></table></div>
         </div>
         <p id="empty" class="muted" hidden>No samples match these filters.</p>
         <div id="sample-pager" class="pager" aria-label="Field-sample pages"><button id="previous" type="button" class="secondary">← Previous</button><span id="page-label"></span><button id="next" type="button" class="secondary">Next →</button></div>
@@ -82,6 +84,10 @@
         <p class="muted">Grouped by Taxa primary key, not spelling of field names or synonyms. Click a taxon to show samples resolved to that exact CoL usage.</p>
         <div class="table-scroll"><table><thead><tr><th scope="col">Resolved taxon</th><th scope="col">Rank</th><th scope="col">Family</th><th scope="col" class="number">Samples</th><th scope="col">Catalogue of Life</th></tr></thead><tbody id="taxon-rows"></tbody></table></div>
       </section>
+      <section id="network-view" class="view" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Directus · Field_Data and Taxa</p><h2>Sample network</h2><p class="muted">Explore one shared graph: each field sample links to its Directus taxon, organ, project, garden and location; Taxa link to their parents. Search or choose a category, select any node to inspect its metadata and page links on the right, then expand its typed relationships. Focus an entity to clear unrelated nodes.</p></div></div>
+        <div id="network-root" aria-label="Interactive field sample network"></div>
+      </section>
       <section id="collectors-view" class="view" hidden>
         <div class="section-heading"><div><p class="eyebrow">Directus · Field_Data and People</p><h2>Collectors</h2></div></div>
         <div id="collectors-board" aria-label="Collectors ranked by linked field samples"></div>
@@ -91,7 +97,7 @@
       </section>
       <section id="compare-ms-view" class="view" hidden>
         <div class="section-heading"><div><p class="eyebrow">Directus · MS_Data</p><h2>Compare MS profiles</h2></div></div>
-        <p class="muted">Find files by sample, resolved taxon, instrument or filename; select as many Directus-linked files as needed, including samples of different species. GNPS2 overlays selected chromatograms when its external dataset is reachable.</p>
+        <p class="muted">Search Directus MS files before results appear. Add any files—including different species—to group A or optional group B; files within a group stack together, while GNPS2 compares the groups side by side when reachable.</p>
         <div id="compare-ms-root" aria-label="Select and compare Directus-linked mass spectrometry files"></div>
       </section>
       <section id="inaturalist-view" class="view" hidden>
@@ -118,12 +124,11 @@
         <p id="species-filter-count" role="status" aria-live="polite"></p>
         <div class="view-switch" role="group" aria-label="Species field sample display"><button id="species-cards-button" type="button" aria-pressed="true">Cards</button><button id="species-list-button" type="button" aria-pressed="false">List</button><button id="species-map-button" type="button" aria-pressed="false">Map</button></div>
         <div id="species-cards-panel"><div id="species-cards" class="species-cards"></div></div>
-        <div id="species-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="species-sample-rows"></tbody></table></div></div>
+        <div id="species-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th></tr></thead><tbody id="species-sample-rows"></tbody></table></div></div>
         <p id="species-empty" class="muted" hidden>No linked field samples match these filters.</p>
         <div id="species-pager" class="pager" aria-label="Species field-sample pages"><button id="species-previous" type="button" class="secondary">← Previous</button><span id="species-page-label" role="status" aria-live="polite"></span><button id="species-next" type="button" class="secondary">Next →</button></div>
         <div id="species-map-panel" hidden><div id="species-map-root"></div></div>
         <section id="species-metabolome" aria-label="LOTUS metabolite search for this species" hidden></section>
-        <section id="species-chemcalc" aria-label="ChemCalc formula and adduct calculator"></section>
       </section>
       <section id="taxon-view" class="view" hidden>
         <a href="#explore" class="back">← Explore taxonomy</a>
@@ -134,7 +139,7 @@
         <p id="taxon-filter-count" role="status" aria-live="polite"></p>
         <div class="view-switch" role="group" aria-label="Related field sample display"><button id="taxon-cards-button" type="button" aria-pressed="true">Cards</button><button id="taxon-table-button" type="button" aria-pressed="false">List</button><button id="taxon-map" type="button" aria-pressed="false">Map</button></div>
         <div id="taxon-cards-panel"><div id="taxon-cards" class="species-cards"></div></div>
-        <div id="taxon-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Field name</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th><th scope="col">Directus</th></tr></thead><tbody id="taxon-sample-rows"></tbody></table></div></div>
+        <div id="taxon-list-panel" hidden><div class="table-scroll"><table><thead><tr><th scope="col">Sample ID</th><th scope="col">Observation subject</th><th scope="col">Resolved CoL taxon</th><th scope="col">Family</th><th scope="col">Project</th><th scope="col">Collection date</th><th scope="col">Processing evidence</th><th scope="col">Compare MS</th></tr></thead><tbody id="taxon-sample-rows"></tbody></table></div></div>
         <p id="taxon-empty" class="muted" hidden>No linked field samples match these filters.</p>
         <div id="taxon-pager" class="pager"><button id="taxon-previous" type="button" class="secondary">← Previous</button><span id="taxon-page-label" role="status" aria-live="polite"></span><button id="taxon-next" type="button" class="secondary">Next →</button></div>
         <div id="taxon-map-panel" hidden><div id="taxon-map-root"></div></div>
@@ -168,6 +173,6 @@
       </section>
     </div>
   </main>
-  <footer><div class="wrap">DBGI · <a href="https://www.dbgi.org/">dbgi.org</a> · Public, read-only field-data snapshot. <a href="https://github.com/digital-botanical-gardens-initiative/directus-ui">Source and refresh instructions</a></div></footer>
+  <footer><div class="wrap">DBGI · <a href="https://www.dbgi.org/">dbgi.org</a> · Public, read-only field-data snapshot. <a href="https://github.com/digital-botanical-gardens-initiative/directus-ui">Source and refresh instructions</a> · <a href="LICENSING.md">Licenses and image credits</a></div></footer>
 </body>
 </html>

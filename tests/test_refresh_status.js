@@ -17,7 +17,7 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../refresh_status.js");
+require("../assets/js/refresh_status.js");
 const {render, load} = window.DBGIRefreshStatus;
 const names = ["samples", "collectors", "garden_progress", "ms_profile", "processing", "inaturalist"];
 const sample = {generated_at: "2026-11-14T07:28:00+00:00"};

@@ -17,21 +17,27 @@ window.Metabolome = (() => {
     }
     return null;
   }
+  function speciesAncestor(taxon, taxaById) {
+    return taxaById instanceof Map ? ancestor(taxon, "species", taxaById) : null;
+  }
 
-  function render(root, {taxon, taxaById, mapping}) {
+
+  function render(root, {taxon, taxaById, mapping, manual = false, comparison = false}) {
     // Replacing the subtree also unloads any iframe from the previous sample.
     root.replaceChildren();
     root.hidden = true;
     if (!(taxaById instanceof Map)) return;
-    const species = ancestor(taxon, "species", taxaById);
-    if (!species) return;
-    const colId = species[1];
+    const species = speciesAncestor(taxon, taxaById);
+    if (!species && !manual) return;
+    const colId = species?.[1];
 
     const panel = document.createElement("div");
     panel.className = "metabolome-panel";
     const heading = document.createElement("h3");
-    heading.append("Species metabolome · ");
-    window.DBGIScientificNames.append(heading, species[2] || colId, species[4]);
+    if (species) {
+      heading.append("Species metabolome · ");
+      window.DBGIScientificNames.append(heading, species[2] || colId, species[4]);
+    } else heading.textContent = "Search LOTUS Explorer";
     panel.append(heading);
 
     const match = typeof colId === "string" && colId && Array.isArray(mapping?.rows)
@@ -39,7 +45,7 @@ window.Metabolome = (() => {
       : null;
     const qid = match?.[1];
     const hasSpeciesQid = typeof qid === "string" && QID.test(qid);
-    const genus = hasSpeciesQid ? null : ancestor(species, "genus", taxaById);
+    const genus = hasSpeciesQid || !species ? null : ancestor(species, "genus", taxaById);
     const genusName = typeof genus?.[2] === "string" ? genus[2].trim() : "";
     // LOTUS accepts taxon names as well as QIDs in its public URL. Only a QID
     // backed by the exact species CoL ID may be described as a species search.
@@ -49,17 +55,20 @@ window.Metabolome = (() => {
         ? `${LOTUS_SEARCH}?taxon=${encodeURIComponent(genusName)}&execute=true`
         : LOTUS_SEARCH;
 
+    const evidenceSubject = comparison ? "the selected MS files" : "this field sample";
     const description = document.createElement("p");
     if (hasSpeciesQid) {
-      description.textContent = "LOTUS Explorer searches externally reported chemical occurrences for this species. These literature and Wikidata annotations are not measurements of this field sample or results from Directus MS_Data.";
+      description.textContent = `LOTUS Explorer searches externally reported chemical occurrences for this species. These literature and Wikidata annotations are not measurements of ${evidenceSubject} or results from Directus MS_Data.`;
     } else if (genusName) {
       description.className = "metabolome-guidance";
       description.append("No exact Wikidata species match is available in this snapshot. Searching LOTUS Explorer for the Directus genus ");
       window.DBGIScientificNames.append(description, genusName, "genus");
-      description.append(" instead; LOTUS resolves that name independently. Genus-level results can include other species and do not establish occurrences for this species or measurements of this field sample.");
+      description.append(` instead; LOTUS resolves that name independently. Genus-level results can include other species and do not establish occurrences for this species or measurements of ${evidenceSubject}.`);
     } else {
       description.className = "metabolome-guidance";
-      description.textContent = "No exact Wikidata species match or resolved Directus genus is available in this snapshot. Enter a genus name in LOTUS Explorer to search more broadly; results do not establish occurrences for this species or measurements of this field sample.";
+      description.textContent = species
+        ? `No exact Wikidata species match or resolved Directus genus is available in this snapshot. Enter a genus name in LOTUS Explorer to search more broadly; results do not establish occurrences for this species or measurements of ${evidenceSubject}.`
+        : "Search LOTUS Explorer by taxon or metabolite. This unscoped literature search is not evidence that any selected Directus MS file contains a compound.";
     }
     panel.append(description);
 
@@ -92,5 +101,5 @@ window.Metabolome = (() => {
     root.hidden = false;
   }
 
-  return {render};
+  return {render, speciesAncestor};
 })();

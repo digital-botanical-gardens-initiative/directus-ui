@@ -5,3 +5,6 @@ site/
 .env.*
 .vscode/
 data/refresh.json
+data/*.json.tmp
+.venv/
+.DS_Store

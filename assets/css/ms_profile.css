@@ -8,3 +8,7 @@
 .ms-profile .ms-profile-count,.ms-profile .ms-profile-instruments,.ms-profile .ms-profile-sample{margin-top:.25rem}
 .ms-profile a{text-decoration:underline;text-underline-offset:.15em;overflow-wrap:anywhere}
 .ms-profile a:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.ms-polarity-badge{position:relative;display:inline-flex;flex:none;box-sizing:border-box;width:1rem;height:1rem;margin-inline-start:.25rem;border:1px solid currentColor;border-radius:50%;vertical-align:middle;font-size:0;line-height:0;color:#5634a5}
+.ms-polarity-badge::before,.ms-polarity-badge--positive::after{position:absolute;top:50%;left:50%;width:50%;height:2px;background:currentColor;content:"";transform:translate(-50%,-50%)}
+.ms-polarity-badge--positive::after{transform:translate(-50%,-50%) rotate(90deg)}
+.ms-polarity-badge--negative{color:#365d75}

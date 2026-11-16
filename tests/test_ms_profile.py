@@ -40,8 +40,8 @@ class MSProfileTests(unittest.TestCase):
             {"id": 1, "parent_sample_container": 21, "sample_container": 22},
         ]
         self.records["MS_Data"] = [
-            {"id": 41, "status": "OK", "uuid_ms_file": "uuid-1", "instrument_used": 1, "parent_sample_container": 22, "filename": "run_001"},
-            {"id": 42, "status": "published", "uuid_ms_file": "uuid-2", "instrument_used": 2, "parent_sample_container": 12, "filename": "run_002.mzML"},
+            {"id": 41, "status": "OK", "uuid_ms_file": "uuid-1", "instrument_used": 1, "injection_method": 10, "parent_sample_container": 22, "filename": "run_neg_001"},
+            {"id": 42, "status": "published", "uuid_ms_file": "uuid-2", "instrument_used": 2, "injection_method": 11, "parent_sample_container": 12, "filename": "run_pos_002.mzML"},
             {"id": 43, "status": "OK", "uuid_ms_file": "uuid-3", "instrument_used": 1, "parent_sample_container": 13},
             {"id": 44, "status": "OK", "uuid_ms_file": "uuid-4", "instrument_used": 1, "parent_sample_container": 99},
             {"id": 45, "status": "OK", "uuid_ms_file": None, "instrument_used": 1, "parent_sample_container": 11},
@@ -51,6 +51,10 @@ class MSProfileTests(unittest.TestCase):
             {"id": 1, "instrument_id": "inst_1", "instrument_model": {"id": 11, "instrument_model": "QExactive HFX"}},
             {"id": 2, "instrument_id": "inst_2", "instrument_model": {"id": 12, "instrument_model": "Orbitrap"}},
         ]
+        self.records["Injection_Methods"] = [
+            {"id": 10, "polarity": "positive"}, {"id": 11, "polarity": "negative"},
+            {"id": 12, "polarity": None},
+        ]
 
     def snapshot(self, records=None, published=None):
         return profile_snapshot(self.records if records is None else records,
@@ -59,8 +63,10 @@ class MSProfileTests(unittest.TestCase):
 
     def test_two_species_distinct_instruments_and_truthful_exclusions(self):
         snapshot = self.snapshot()
-        self.assertEqual(snapshot["profiles"], [[41, 1, 1, "OK", "run_001"], [42, 2, 2, "published", "run_002.mzML"]])
+        self.assertEqual(snapshot["profiles"], [[41, 1, 1, "OK", "run_neg_001", 10],
+                                                [42, 2, 2, "published", "run_pos_002.mzML", 11]])
         self.assertEqual(snapshot["instruments"], [[1, "inst_1", "QExactive HFX"], [2, "inst_2", "Orbitrap"]])
+        self.assertEqual(snapshot["injection_methods"], [[10, "positive"], [11, "negative"], [12, None]])
         self.assertEqual(snapshot["total_ms_records"], 6)
         self.assertEqual(snapshot["gnps_filenames_unavailable"], 0)
         for key in ("excluded_unlinked_ms", "excluded_outside_snapshot_ms",
@@ -76,7 +82,7 @@ class MSProfileTests(unittest.TestCase):
             {"id": 48, "status": "OK", "uuid_ms_file": "uuid-8", "instrument_used": 2, "parent_sample_container": 21, "filename": "../escape?foo"},
         ])
         snapshot = self.snapshot(rows)
-        self.assertEqual(snapshot["profiles"][-2:], [[47, 1, 2, "OK", None], [48, 1, 2, "OK", None]])
+        self.assertEqual(snapshot["profiles"][-2:], [[47, 1, 2, "OK", None, None], [48, 1, 2, "OK", None, None]])
         self.assertEqual(snapshot["gnps_filenames_unavailable"], 2)
 
     def test_conflicting_parent_and_missing_container_abort(self):
@@ -115,6 +121,21 @@ class MSProfileTests(unittest.TestCase):
         rows["Instruments"][0]["instrument_model"] = None
         with self.assertRaisesRegex(ValueError, "model relation"):
             self.snapshot(rows)
+    def test_unknown_method_polarity_or_missing_method_fails_without_inventing_from_filename(self):
+        rows = copy.deepcopy(self.records)
+        rows["MS_Data"][0]["injection_method"] = 99
+        with self.assertRaisesRegex(ValueError, "missing injection method"):
+            self.snapshot(rows)
+        rows = copy.deepcopy(self.records)
+        rows["Injection_Methods"][0]["polarity"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "unknown polarity"):
+            self.snapshot(rows)
+        rows = copy.deepcopy(self.records)
+        rows["MS_Data"][0]["injection_method"] = 12
+        self.assertEqual(self.snapshot(rows)["profiles"][0][-1], 12)
+        rows["MS_Data"][0]["injection_method"] = None
+        self.assertIsNone(self.snapshot(rows)["profiles"][0][-1])
+
 
     def test_invalid_published_sample_fails_before_fetch_and_export_is_atomic(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -159,7 +180,7 @@ class MSProfileTests(unittest.TestCase):
             self.assertEqual(len(calls), 3 * len(FIELDS))
             self.assertEqual({name for name, _ in calls}, set(FIELDS))
             self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["profiles"],
-                             [[41, 1, 1, "OK", "run_001"], [42, 2, 2, "published", "run_002.mzML"]])
+                             [[41, 1, 1, "OK", "run_neg_001", 10], [42, 2, 2, "published", "run_pos_002.mzML", 11]])
 
 
 if __name__ == "__main__":

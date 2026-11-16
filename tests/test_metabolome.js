@@ -20,8 +20,8 @@ class Node {
 
 global.document = {createElement: (tag) => new Node(tag)};
 global.window = {};
-require("../scientific_names.js");
-require("../metabolome.js");
+require("../assets/js/scientific_names.js");
+require("../assets/js/metabolome.js");
 const {render} = window.Metabolome;
 const mapping = {source: "https://www.wikidata.org", property: "P10585", generated_at: "2026-11-14T00:00:00Z",
   rows: [["COL-A", "Q15385247"], ["COL-B", "Q42"]]};
@@ -136,4 +136,16 @@ test("only exact CoL IDs with safe QIDs build species URLs, and names are insert
       "https://lotus-initiative.github.io/lotus-explore-rs/search/?taxon=Echeveria&execute=true");
     assert.doesNotMatch(root.findAll("iframe")[0].src, /Q12/);
   }
+});
+
+test("explicit unscoped search loads only the public LOTUS form without a fabricated taxon", () => {
+  const root = new Node("section");
+  render(root, {taxaById, mapping, manual: true});
+  assert.equal(root.hidden, false);
+  assert.equal(root.findAll("iframe")[0].src, "https://lotus-initiative.github.io/lotus-explore-rs/search/");
+  assert.match(root.textContent, /unscoped literature search/);
+  assert.equal(window.Metabolome.speciesAncestor(subspecies, taxaById), species);
+  render(root, {taxon: genus, taxaById, mapping, manual: true});
+  assert.equal(root.findAll("iframe")[0].src, "https://lotus-initiative.github.io/lotus-explore-rs/search/");
+  assert.equal(root.findAll("iframe").length, 1);
 });

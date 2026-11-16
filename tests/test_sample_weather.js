@@ -52,7 +52,7 @@ global.document = {
   createElementNS: (namespace, tag) => new Node(tag),
 };
 global.window = {};
-require("../sample_weather.js");
+require("../assets/js/sample_weather.js");
 const weather = global.window.SampleWeather;
 const sample = {sampleId: "sample-should-not-leak", date: "20240625134458", latitude: 47, longitude: 7};
 

@@ -17,8 +17,8 @@ class Element {
 }
 global.document = {createElement: tag => new Element(tag), createElementNS: (_namespace, tag) => new Element(tag)};
 global.window = {};
-require("../sample_subject.js");
-require("../collector_map.js");
+require("../assets/js/sample_subject.js");
+require("../assets/js/collector_map.js");
 const {mount} = window.DBGICollectorMap;
 const taxon = [3, "COL-3", "Coffea arabica", "L.", "species", null];
 function observation(id, longitude, latitude) {

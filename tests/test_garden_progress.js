@@ -25,7 +25,7 @@ class Node {
 global.Element = Node;
 global.document = {createElement: (tag) => new Node(tag), createTextNode: String};
 global.window = {};
-require("../garden_progress.js");
+require("../assets/js/garden_progress.js");
 const {render} = window.GardenProgress;
 
 const sample = {
