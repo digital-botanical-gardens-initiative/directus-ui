@@ -59,7 +59,11 @@ window.DBGIRefreshStatus = (() => {
     }
     detail.append("Scheduled daily at 08:30 (Europe/Zurich, CET/CEST); GitHub may start later. ");
     const runs = document.createElement("a");
-    runs.href = "https://github.com/digital-botanical-gardens-initiative/directus-ui/actions/workflows/pages.yml";
+    const emiHost = typeof location !== "undefined" &&
+      (location.hostname === "earthmetabolome.org" ||
+        location.hostname === "www.earthmetabolome.org" ||
+        location.hostname === "earth-metabolome-initiative.github.io");
+    runs.href = `https://github.com/${emiHost ? "earth-metabolome-initiative" : "digital-botanical-gardens-initiative"}/directus-ui/actions/workflows/pages.yml`;
     runs.textContent = "Refresh runs ↗";
     runs.target = "_blank";
     runs.rel = "noopener noreferrer";

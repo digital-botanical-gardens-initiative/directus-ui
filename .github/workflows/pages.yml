@@ -10,56 +10,10 @@ permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    env:
-      DIRECTUS_TOKEN: ${{ secrets.DIRECTUS_READ_TOKEN }}
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Refresh resolved taxonomy snapshot
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_snapshot.py
-      - name: Refresh Directus collectors and linked samples
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_collectors.py
-      - name: Refresh Directus garden progress snapshot
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_garden_progress.py
-      - name: Refresh Directus MS profiling, instruments and injection-method polarity
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_ms_profile.py
-      - name: Refresh Directus specimen processing lineage
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_processing.py
-      - name: Refresh Directus-linked iNaturalist observations
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_inaturalist.py
-      - name: Record completed Directus refresh
-        if: env.DIRECTUS_TOKEN != ''
-        run: python scripts/build_refresh_manifest.py
-      - name: Use committed snapshot when token is unavailable
-        if: env.DIRECTUS_TOKEN == ''
-        run: echo "::warning::DIRECTUS_READ_TOKEN is not configured; publishing committed snapshots without refreshing them"
-      - name: Stage static site
-        run: |
-          mkdir -p site/data
-          cp index.html LICENSE LICENSING.md site/
-          cp -R assets site/assets
-          cp data/samples.json data/collectors.json data/processing.json data/garden_progress.json data/gardens.json data/inaturalist.json data/wikidata_taxa.json data/ms_profile.json site/data/
-          if [ -f data/refresh.json ]; then cp data/refresh.json site/data/; fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+    uses: ./.github/workflows/publish-site.yml
+    with:
+      source_ref: ${{ github.sha }}
+    secrets:
+      DIRECTUS_READ_TOKEN: ${{ secrets.DIRECTUS_READ_TOKEN }}

@@ -10,6 +10,7 @@ Noteworthy user- and contributor-visible changes go under **Unreleased** until a
 - Separate PR checks for Python exporters and browser-module tests that work without Directus secrets.
 - A short browser smoke checklist and a detailed technical reference linked from the README.
 - Open licensing for original code/docs (MIT), DBGI/EMI data (CC0), and separately attributed DBGI imagery and weather icons (CC BY 4.0).
+- A reusable Pages build and a copy-ready Earth Metabolome deployment workflow let the same application and Directus exports be published by two repositories without mirroring source code.
 
 ### Changed
 

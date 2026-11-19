@@ -39,6 +39,19 @@ test("completed six-export refresh is shown in Swiss time with separately labele
   assert.match(root.textContent, /14 Jul 2026, 08:28/);
 });
 
+test("Earth Metabolome site links refresh runs to its own deployment", () => {
+  const root = new Node("aside");
+  const previous = global.location;
+  try {
+    global.location = {hostname: "www.earthmetabolome.org"};
+    render(root, sample, manifest);
+    assert.equal(root.findAll("a")[0].href,
+      "https://github.com/earth-metabolome-initiative/directus-ui/actions/workflows/pages.yml");
+  } finally {
+    global.location = previous;
+  }
+});
+
 test("stale, partial, inconsistent and invalid completion metadata cannot claim a full refresh", () => {
   const root = new Node("aside");
   for (const untrusted of [null,

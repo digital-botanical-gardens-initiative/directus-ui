@@ -2,7 +2,7 @@
 
 A read-only, static dashboard for Digital Botanical Gardens Initiative field samples. Search samples, browse the **Directus Taxa hierarchy** by family or species, explore gardens and collectors on maps, and inspect recorded processing, iNaturalist observations and MS files. Directus is the source of collection and processing records. External LOTUS, CoL, GNPS2, weather and iNaturalist services provide clearly labelled references or estimates, not new Directus facts.
 
-**[Open the published dashboard](https://digital-botanical-gardens-initiative.github.io/directus-ui/)**
+**[Open the published DBGI dashboard](https://www.dbgi.org/directus-ui/)**
 
 ## Preview locally (no Directus account needed)
 
@@ -34,9 +34,9 @@ Only exported, reviewed fields are written to same-origin snapshots; credentials
 - `data/`: committed, reviewable Directus-derived snapshots and the garden catalog; `data/refresh.json` is a generated, ignored deployment marker. No visitor-facing credentials.
 - `scripts/`: Python exporters and the optional CoL → Wikidata reconciler.
 - `tests/`: Node.js browser-module tests and Python exporter tests.
-- `.github/workflows/`: static Pages publication and contributor checks.
+- `.github/workflows/`: shared GitHub Pages build, DBGI publishing caller and contributor checks.
 
-The CI deployment stages **only** `index.html`, `LICENSE`, `LICENSING.md`, `assets/` and selected `data/` files. On pushes to `main`, manual dispatch and its daily **08:30 Europe/Zurich scheduled start**, it refreshes six Directus snapshots when the secret is configured; without the secret it warns and publishes the committed snapshots without claiming a completed refresh. `data/wikidata_taxa.json` is *not* refreshed daily. The dashboard's freshness indicator reports actual snapshot times, not a guarantee of schedule completion.
+The shared Pages workflow stages **only** `index.html`, `LICENSE`, `LICENSING.md`, `assets/` and selected `data/` files. The DBGI caller runs on pushes to `main`, manual dispatch and its daily **08:30 Europe/Zurich scheduled start**; a small workflow in the Earth Metabolome organization can call the same build to publish an identical service at `www.earthmetabolome.org/directus-ui/`. Each deployment refreshes six Directus snapshots when its own secret is configured; without the secret it warns and publishes committed snapshots without claiming a completed refresh. `data/wikidata_taxa.json` is *not* refreshed daily. The dashboard's freshness indicator reports actual snapshot times, not a guarantee of schedule completion. This first dual-deployment phase does **not** filter DBGI data down to five gardens or change EMI branding.
 
 ## Contribute and learn more
 
@@ -44,6 +44,7 @@ The CI deployment stages **only** `index.html`, `LICENSE`, `LICENSING.md`, `asse
 - [CHANGELOG.md](CHANGELOG.md) — noteworthy changes and the Unreleased section.
 - [Technical reference](docs/technical-reference.md) — detailed provenance, taxonomy, feature behavior, privacy and external-service limitations.
 - [Manual checks](docs/manual-checks.md) — browser smoke checks for sample, taxonomy, collector, map and MS routes.
+- [Earth Metabolome deployment](docs/earth-metabolome-deployment.md) — create the tiny destination repository and call the shared workflow; no duplicate application source.
 
 For a quick check after editing:
 
