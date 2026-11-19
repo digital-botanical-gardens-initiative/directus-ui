@@ -17,6 +17,10 @@ Noteworthy user- and contributor-visible changes go under **Unreleased** until a
 - Browser JavaScript and CSS are organized under `assets/js/` and `assets/css/`, with Pages staging and test imports updated to match.
 - README now focuses on getting started and access requirements; detailed feature, provenance and privacy notes live in `docs/technical-reference.md`.
 
+### Fixed
+
+- Pages publication now waits for the artifact-uploading build job to complete before looking up its artifact in the deployment job.
+
 ## Earlier development — approximate, undated
 
 - **Directus-backed foundation:** Built a lightweight GitHub Pages dashboard from reviewed, read-only `Field_Data` and `Taxa` snapshots. Sample IDs and taxonomic ancestry stay tied to Directus records; Catalogue of Life links provide public references rather than replacing the Directus hierarchy.
