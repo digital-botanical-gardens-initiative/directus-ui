@@ -32,6 +32,30 @@ const linked = (model, a, b, relation) => model.edges.some((edge) =>
   edge.relation === relation && ((edge.from === model.nodes.get(a) && edge.to === model.nodes.get(b)) ||
     (edge.from === model.nodes.get(b) && edge.to === model.nodes.get(a))));
 
+test("garden-only network groups samples directly into five named gardens without project nodes", () => {
+  const catalog = {gardens: [
+    {id: "fribourg", name: "Botanical Garden of the University of Fribourg", aliases: ["fribourg"]},
+    {id: "neuchatel", name: "Botanical Garden of Neuchâtel", aliases: ["neuchatel"]},
+    {id: "champex", name: "Alpine Botanical Garden of Champex", aliases: ["champex"]},
+    {id: "prague", name: "Prague Botanical Garden", aliases: ["prague"]},
+    {id: "kew", name: "Royal Botanic Gardens, Kew", aliases: ["kew"]},
+  ]};
+  const scopedRows = catalog.gardens.map((garden, index) =>
+    sample(index + 1, `Sample ${index + 1}`, garden.id, null, null, 4, "Leaf"));
+  const graph = build(scopedRows, taxa, catalog, "dbgi");
+  assert.equal(graph.hubs.gardens.label, "Botanical gardens");
+  assert.equal([...graph.nodes.values()].filter((node) => node.kind === "garden").length, 5);
+  assert.equal([...graph.nodes.values()].some((node) => node.kind === "project" || node.id === "garden:other"), false);
+  for (const [index, garden] of catalog.gardens.entries()) {
+    assert.equal(graph.nodes.get(`garden:${garden.id}`).label, garden.name);
+    assert.equal(linked(graph, `sample:${index + 1}`, `garden:${garden.id}`, "botanical garden"), true);
+    assert.equal(graph.search(garden.name)[0], graph.nodes.get(`garden:${garden.id}`));
+  }
+  assert.equal(graph.scene().focus(graph.nodes.get("garden:fribourg")).added >= 1, true);
+  assert.throws(() => build([sample(10, "Legacy", "jbuf", null, null, 4, null)], taxa, catalog, "dbgi"),
+    /Unknown botanical garden/);
+});
+
 test("one actual sample joins its Taxa species, organ, project, garden and location in the same graph", () => {
   const graph = build(rows, taxa, gardens);
   assert.equal(graph.root.count, rows.length);

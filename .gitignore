@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 site/
+site-dbgi/
+site-emi/
 .env
 .env.*
 .vscode/

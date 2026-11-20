@@ -7,6 +7,10 @@ on:
         description: DBGI source commit or branch to publish
         type: string
         default: main
+      site:
+        description: Published site scope (dbgi gardens or unrestricted emi)
+        type: string
+        default: emi
     secrets:
       DIRECTUS_READ_TOKEN:
         required: false
@@ -59,13 +63,10 @@ jobs:
       - name: Use committed snapshot when token is unavailable
         if: env.DIRECTUS_TOKEN == ''
         run: echo "::warning::DIRECTUS_READ_TOKEN is not configured; publishing committed snapshots without refreshing them"
-      - name: Stage static site
-        run: |
-          mkdir -p site/data
-          cp index.html LICENSE LICENSING.md site/
-          cp -R assets site/assets
-          cp data/samples.json data/collectors.json data/processing.json data/garden_progress.json data/gardens.json data/inaturalist.json data/wikidata_taxa.json data/ms_profile.json site/data/
-          if [ -f data/refresh.json ]; then cp data/refresh.json site/data/; fi
+      - name: Stage scoped static site
+        env:
+          SITE: ${{ inputs.site }}
+        run: python scripts/stage_site.py --site "$SITE"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

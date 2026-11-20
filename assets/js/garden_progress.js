@@ -69,7 +69,7 @@
     const table = element("table", "garden-progress__table");
     const caption = element("caption", null, "Field samples by garden and Directus processing records");
     const header = element("tr");
-    for (const title of ["Garden / project", "Progress", "Collected", "Extracted", "Profiled"]) {
+    for (const title of [data.site === "dbgi" ? "Garden" : "Garden / project", "Progress", "Collected", "Extracted", "Profiled"]) {
       const cell = element("th", null, title);
       cell.scope = "col";
       header.append(cell);
@@ -112,7 +112,9 @@
     const notes = element("details", "garden-progress__method");
     notes.append(element("summary", null, "How the stages are counted"));
     notes.append(element("p", null, data.method));
-    notes.append(element("p", null, "Unlinked processing records are excluded; their counts and all record statuses are recorded in the downloadable snapshot."));
+    notes.append(element("p", null, data.site === "dbgi" ?
+      "Only processing records linked to samples in these five gardens are included. This garden-only snapshot does not report counts of unlinked processing records or global record statuses." :
+      "Unlinked processing records are excluded; their counts and all record statuses are recorded in the downloadable snapshot."));
     const source = element("a", null, "Directus Field_Data ↗");
     source.href = data.source + "Field_Data";
     source.target = "_blank";

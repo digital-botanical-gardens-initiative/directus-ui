@@ -12,6 +12,7 @@ const TREEMAP_COLORS = [
 let rows = [];
 let projects = [];
 let gardenCatalog;
+const dbgiGardenOnly = () => sampleSnapshot?.site === "dbgi";
 let gardenSummaries = [];
 const gardenByProject = new Map();
 const gardenById = new Map();
@@ -74,11 +75,14 @@ function projectName(value) { return value || "Unassigned"; }
 function projectMatches(project, scope) {
   if (!scope) return true;
   if (scope.startsWith("g:")) return gardenByProject.get(project)?.id === scope.slice(2);
-  return (project || "") === scope.slice(2);
+  return !dbgiGardenOnly() && scope.startsWith("p:") && (project || "") === scope.slice(2);
 }
 function scopeName(scope) {
   return scope.startsWith("g:") ? gardenById.get(scope.slice(2))?.name || "Unknown garden" :
     projectName(scope.slice(2));
+}
+function gardenOrProjectName(project) {
+  return dbgiGardenOnly() ? gardenByProject.get(project)?.name || projectName(project) : projectName(project);
 }
 function resolvedName(taxon) { return taxon ? [taxon[2], taxon[3]].filter(Boolean).join(" ") : "Unresolved"; }
 function scientificTaxon(parent, taxon) {
@@ -160,7 +164,7 @@ function browseSampleScope({project = "", family = "", subject = "", map = false
   selectedTaxonId = null;
   selectedTreemapTaxa = null;
   $("query").value = "";
-  $("project").value = project;
+  $("project").value = !dbgiGardenOnly() || !project.startsWith("p:") ? project : "";
   $("family-query").value = family;
   $("subject-filter").value = subject ? `value:${subject.trim().toLocaleLowerCase()}` : "";
   sampleView = map ? "map" : "cards";
@@ -268,13 +272,14 @@ async function showCollectors(hash) {
       const response = await fetch("data/collectors.json", {cache: "no-cache"});
       if (!response.ok) throw new Error(`Snapshot request returned HTTP ${response.status}`);
       const snapshot = await response.json();
-      if (snapshot.source !== directusBase || snapshot.sample_snapshot_generated_at !== sampleSnapshot.generated_at) {
+      if (snapshot.source !== directusBase || snapshot.sample_snapshot_generated_at !== sampleSnapshot.generated_at ||
+          (dbgiGardenOnly() && snapshot.site !== "dbgi")) {
         throw new Error("Collector snapshot does not match the published field-sample snapshot");
       }
       collectorsView = window.DBGICollectors.create({
         leaderboardRoot: $("collectors-board"),
         detailRoot: $("collector-detail"),
-        snapshot, byId, directusBase, resolveSpecies: speciesOf,
+        snapshot, byId, directusBase, gardens: gardenCatalog, resolveSpecies: speciesOf,
         renderScientificTaxon: scientificTaxon, loadLeaflet,
       });
     })();
@@ -375,7 +380,7 @@ function route() {
     show("network");
     try {
       if (!networkController) networkController = window.DBGISampleNetwork.mount($("network-root"),
-        {rows, taxaById, gardens: gardenCatalog, directusBase, onBrowse: browseSampleScope});
+        {rows, taxaById, gardens: gardenCatalog, site: sampleSnapshot.site, directusBase, onBrowse: browseSampleScope});
       networkController.resize();
     } catch (error) {
       $("network-root").replaceChildren();
@@ -484,7 +489,7 @@ function explore() {
   for (const project of projects) {
     const tr = element("tr", "", body);
     const cell = element("td", "", tr);
-    const link = element("a", projectName(project.name), cell);
+    const link = element("a", dbgiGardenOnly() ? project.name : projectName(project.name), cell);
     link.href = "#samples";
     link.addEventListener("click", () => {
       selectedTaxonId = null; selectedTreemapTaxa = null; $("project").value = project.key;
@@ -519,7 +524,7 @@ function explore() {
     renderCountBar(element("td", "", tr, "number"), count, maximum);
     catalogueLink(element("td", "", tr), taxon, "Open ↗");
   }
-  addTableControls($("project-rows").closest("table"), "garden and project rows");
+  addTableControls($("project-rows").closest("table"), dbgiGardenOnly() ? "garden rows" : "garden and project rows");
   addTableControls($("taxon-rows").closest("table"), "most-collected taxon rows");
 }
 
@@ -603,7 +608,7 @@ function buildTreemap() {
   treemapCurrent = treemapRoot;
   treemapSelected = null;
   const familiesCount = [...treemapRoot.children.values()].filter((node) => node.taxon).length;
-  $("treemap-summary").textContent = `${format(treemapRoot.count)} resolved of ${format(total)} field samples · ${format(familiesCount)} families${scope ? ` · ${scopeName(scope)}` : " · all projects"}`;
+  $("treemap-summary").textContent = `${format(treemapRoot.count)} resolved of ${format(total)} field samples · ${format(familiesCount)} families${scope ? ` · ${scopeName(scope)}` : dbgiGardenOnly() ? " · all gardens" : " · all projects"}`;
   renderTreemap();
 }
 
@@ -716,7 +721,7 @@ function renderTreemap() {
     parent: treemapCurrent, taxon: treemapCurrent.taxon, label: `Identified as ${treemapCurrent.taxon[4]}`,
     count: treemapCurrent.own, own: treemapCurrent.own, children: new Map(), ownOnly: true,
   });
-  if (!treemapCurrent.count) element("p", "No resolved samples in this project.", canvas);
+  if (!treemapCurrent.count) element("p", dbgiGardenOnly() ? "No resolved samples in this garden." : "No resolved samples in this project.", canvas);
   for (const {node, x, y, width, height} of treemapLayout(nodes, canvas.clientWidth, canvas.clientHeight)) {
     const tile = element("button", "", canvas, "treemap-tile");
     tile.type = "button";
@@ -759,8 +764,9 @@ const sampleCollator = new Intl.Collator("en", {numeric: true, sensitivity: "bas
 function sampleSearchMatches(row, query) {
   if (!query) return true;
   return [row[1], row[3], resolvedName(taxaById.get(row[7])), familyOf(row[7])?.[2],
-    projectName(row[2]), gardenByProject.get(row[2])?.name, row[6]]
-    .some((value) => String(value || "").toLocaleLowerCase().includes(query));
+    gardenOrProjectName(row[2]), row[6]]
+    .some((value) => String(value || "").toLocaleLowerCase().includes(query)) ||
+    (!dbgiGardenOnly() && (gardenByProject.get(row[2])?.name || "").toLocaleLowerCase().includes(query));
 }
 function sortedSamples(items, order) {
   if (order === "source") return items;
@@ -772,7 +778,7 @@ function sortedSamples(items, order) {
       case "taxon": return resolvedName(taxaById.get(row[7]));
       case "field": return row[3] || "";
       case "family": return familyOf(row[7])?.[2] || "";
-      case "project": return projectName(row[2]);
+      case "project": return gardenOrProjectName(row[2]);
       case "date": return row[6] || "";
       case "profiled": return msProfileIndex?.byField.has(row[0]) ? 1 : 0;
       default: return row[1];
@@ -844,7 +850,7 @@ function renderSampleTableRow(body, row) {
   scientificTaxon(taxonLink, resolved);
   if (resolved) taxonLink.href = taxonHref(resolved);
   element("td", familyOf(row[7])?.[2] || "—", tr);
-  element("td", projectName(row[2]), tr);
+  element("td", gardenOrProjectName(row[2]), tr);
   element("td", displayCollectionDate(row[6]), tr);
   renderSampleStages(row, element("td", "", tr));
   const compareCell = element("td", "", tr);
@@ -1016,7 +1022,8 @@ function renderFieldSampleCard(cards, row) {
     element("p", `Field name: ${row[3]}`, card, "muted");
   }
   const date = displayCollectionDate(row[6]);
-  element("p", `${gardenByProject.get(row[2])?.name || projectName(row[2])}${date === "—" ? "" : ` · ${date}`}`, card, "muted");
+  element("p", `${dbgiGardenOnly() ? gardenOrProjectName(row[2]) :
+    gardenByProject.get(row[2])?.name || projectName(row[2])}${date === "—" ? "" : ` · ${date}`}`, card, "muted");
   if (processingIndex) {
     const stages = processingIndex.byField.get(row[0]) || [];
     const counts = ["dried", "extract", "aliquot", "ms"].map((kind) => stages.filter((record) => record[0] === kind).length);
@@ -1296,7 +1303,8 @@ function detail(row) {
   fields.replaceChildren();
   for (const [label, value] of [
     ...(gardenByProject.has(row[2]) ? [["Botanical garden", gardenByProject.get(row[2]).name]] : []),
-    ["Directus project", projectName(row[2])], ["Field name (unified)", row[3] || "Not recorded"],
+    ...(!dbgiGardenOnly() ? [["Directus project", projectName(row[2])]] : []),
+    ["Field name (unified)", row[3] || "Not recorded"],
     ["Resolved CoL name", taxon ? resolvedName(taxon) : "Not resolved"],
     ["CoL rank", taxon?.[4] || "—"], ["CoL family", family?.[2] || "—"],
     ["CoL usage ID", taxon?.[1] || "—"], ["Taxa Directus ID", taxon?.[0] ?? "—"],
@@ -1590,12 +1598,17 @@ async function load() {
       directusBase = source.href.replace(/\/$/, "");
     }
     sampleSnapshot = snapshot;
+    if (dbgiGardenOnly() && (!gardenCatalog ||
+        gardenCatalog.gardens.some((garden) => garden.aliases.length !== 1 || garden.aliases[0] !== garden.id))) {
+      throw new Error("Incomplete garden-only catalog");
+    }
     rows = snapshot.rows;
     window.DBGIObservationSubject.populate($("subject-filter"), rows);
     for (const taxon of snapshot.taxa) taxaById.set(taxon[0], taxon);
     const groups = new Map();
     const familyGroups = new Map();
     for (const row of rows) {
+      if (dbgiGardenOnly() && !gardenByProject.has(row[2])) throw new Error("Unknown garden in scoped sample snapshot");
       byId.set(row[0], row);
       const name = row[2] || "";
       if (!groups.has(name)) groups.set(name, { name, count: 0, taxa: new Set(), located: 0 });
@@ -1632,7 +1645,7 @@ async function load() {
       result.samples = result.count;
       return result;
     }) : [];
-    const otherProjects = [...groups.values()].filter((group) => !gardenByProject.has(group.name))
+    const otherProjects = dbgiGardenOnly() ? [] : [...groups.values()].filter((group) => !gardenByProject.has(group.name))
       .map((group) => ({...group, key: `p:${group.name}`}))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     projects = [...gardenSummaries, ...otherProjects];
@@ -1645,7 +1658,7 @@ async function load() {
       const treemapOption = element("option", projectName(group.name), $("treemap-project"));
       treemapOption.value = group.key;
     }
-    if (gardenCatalog) {
+    if (gardenCatalog && !dbgiGardenOnly()) {
       const aliases = element("optgroup", "", $("project"));
       aliases.label = "Individual Directus projects";
       for (const garden of gardenCatalog.gardens) for (const alias of garden.aliases) {
@@ -1660,11 +1673,38 @@ async function load() {
       }
     }
     $("species-project").append(...[...$("taxon-project").children].slice(1).map((option) => option.cloneNode(true)));
+    if (dbgiGardenOnly()) {
+      $("query").parentElement.firstChild.textContent = "Sample ID, taxon, field name or garden";
+      for (const id of ["project", "species-project", "taxon-project", "treemap-project"]) {
+        $(id).parentElement.firstChild.textContent = id === "treemap-project" ? "Botanical garden" : "Garden";
+        $(id).firstElementChild.textContent = "All gardens";
+      }
+      for (const id of ["sample-sort", "species-sort", "taxon-sort"]) {
+        for (const option of $(id).options) if (option.value.startsWith("project")) {
+          option.textContent = option.textContent.replace("Project", "Garden");
+        }
+      }
+      for (const id of ["sample-rows", "species-sample-rows", "taxon-sample-rows"]) {
+        $(id).closest("table").querySelectorAll("th")[4].textContent = "Garden";
+      }
+      const exploreSection = $("project-rows").closest("table").parentElement;
+      exploreSection.previousElementSibling.textContent =
+        "The five botanical gardens group the published field samples. CoL taxa are distinct resolved Taxa records linked from field observations, regardless of rank.";
+      exploreSection.previousElementSibling.previousElementSibling.querySelector("h2").textContent = "Botanical gardens";
+      exploreSection.querySelector("th").textContent = "Garden";
+      $("network-view").querySelector(".section-heading .muted").textContent =
+        "Explore one shared graph: each field sample links to its Directus taxon, organ, botanical garden and location; Taxa link to their parents. Search or choose a category, select a node to inspect its metadata and page links, then expand its relationships.";
+      $("treemap-project").closest(".filters").previousElementSibling.textContent =
+        "Areas represent resolved field samples, grouped by their linked Taxa family, genus and exact identification. Choose all gardens or one botanical garden; click a rectangle to explore its descendants. Names and ancestry come only from Taxa.";
+      document.querySelector(".hero-inner > p:not(.eyebrow)").textContent =
+        "Find a botanical sample, browse gardens, and follow its recorded identity and location. A read-only view of Directus field data.";
+    }
     for (const family of [...families].sort((a, b) => taxaById.get(a.id)[2].localeCompare(taxaById.get(b.id)[2]))) {
       const option = element("option", "", $("family-suggestions"));
       option.value = taxaById.get(family.id)[2];
     }
-    $("updated").textContent = `${format(snapshot.total_rows)} source records`;
+    $("updated").textContent = dbgiGardenOnly() ? `${format(rows.length)} garden field samples` :
+      `${format(snapshot.total_rows)} source records`;
     void window.DBGIRefreshStatus.load($("refresh-status"), snapshot);
     summary(); explore(); filter(); buildTreemap(); route();
   } catch (error) {

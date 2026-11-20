@@ -1,8 +1,8 @@
-# DBGI sample explorer
+# DBGI and EMI sample explorers
 
-A read-only, static dashboard for Digital Botanical Gardens Initiative field samples. Search samples, browse the **Directus Taxa hierarchy** by family or species, explore gardens and collectors on maps, and inspect recorded processing, iNaturalist observations and MS files. Directus is the source of collection and processing records. External LOTUS, CoL, GNPS2, weather and iNaturalist services provide clearly labelled references or estimates, not new Directus facts.
+A shared, read-only static dashboard for Directus field samples. The **DBGI site** publishes only the five botanical gardens; the **EMI site** publishes all projects. Search samples, browse the Directus Taxa hierarchy, explore gardens and collectors on maps, and inspect recorded processing, iNaturalist observations and MS files. Directus is the source of collection and processing records. External LOTUS, CoL, GNPS2, weather and iNaturalist services provide clearly labelled references or estimates.
 
-**[Open the published DBGI dashboard](https://www.dbgi.org/directus-ui/)**
+**[DBGI · five gardens](https://www.dbgi.org/directus-ui/)** · **[EMI · all projects](https://www.earthmetabolome.org/directus-ui/)**
 
 ## Preview locally (no Directus account needed)
 
@@ -14,7 +14,7 @@ cd directus-ui
 python3 -m http.server 8000
 ```
 
-Open <http://localhost:8000/>. The committed `data/*.json` snapshots supply the dashboard. Do **not** open `index.html` with `file://`: browsers block its JSON requests. Internet access is needed only for external maps, images, weather and linked third-party services. The browser never authenticates to Directus or receives a Directus token.
+Open <http://localhost:8000/> for the unrestricted committed snapshot (EMI mode). To preview exactly what DBGI Pages publishes, run `python3 scripts/stage_site.py --site dbgi` first, then open <http://localhost:8000/site/> using the same local server. Do **not** open `index.html` with `file://`: browsers block its JSON requests. Internet access is needed only for external maps, images, weather and linked third-party services. The browser never authenticates to Directus or receives a Directus token.
 
 ## Directus access: what is actually required?
 
@@ -31,12 +31,12 @@ Only exported, reviewed fields are written to same-origin snapshots; credentials
 
 - `index.html`: static entry point and views.
 - `assets/js/`, `assets/css/`: browser code and styles; `assets/` also contains locally served images and portraits. Keep browser URLs relative to `index.html` and CSS image URLs relative to their stylesheet.
-- `data/`: committed, reviewable Directus-derived snapshots and the garden catalog; `data/refresh.json` is a generated, ignored deployment marker. No visitor-facing credentials.
+- `data/`: committed, reviewable full Directus-derived snapshots. **Edit `data/gardens.json` to assign each Directus project alias to exactly one of the five gardens** (e.g. `jbn`, `jbn-new` → Neuchâtel); the DBGI deployment uses this catalog to scope its published snapshots and replaces project codes with garden identities. `data/refresh.json` is a generated, ignored deployment marker. No visitor-facing credentials.
 - `scripts/`: Python exporters and the optional CoL → Wikidata reconciler.
 - `tests/`: Node.js browser-module tests and Python exporter tests.
 - `.github/workflows/`: shared GitHub Pages build, DBGI publishing caller and contributor checks.
 
-The shared Pages workflow stages **only** `index.html`, `LICENSE`, `LICENSING.md`, `assets/` and selected `data/` files. The DBGI caller runs on pushes to `main`, manual dispatch and its daily **08:30 Europe/Zurich scheduled start**; a small workflow in the Earth Metabolome organization can call the same build to publish an identical service at `www.earthmetabolome.org/directus-ui/`. Each deployment refreshes six Directus snapshots when its own secret is configured; without the secret it warns and publishes committed snapshots without claiming a completed refresh. `data/wikidata_taxa.json` is *not* refreshed daily. The dashboard's freshness indicator reports actual snapshot times, not a guarantee of schedule completion. This first dual-deployment phase does **not** filter DBGI data down to five gardens or change EMI branding.
+The shared Pages workflow refreshes six Directus snapshots when the caller's read-only secret is configured, then stages **one selected scope per deployment** from the same source code: `.github/workflows/pages.yml` selects `site: dbgi` and publishes only linked garden samples, while the Earth Metabolome caller defaults to `site: emi` and publishes all projects. DBGI garden aliases are **grouping instructions**, not separate choices on that website; all linked processing, MS, curation and collector data are scoped before publication. Each artifact contains only `index.html`, `LICENSE`, `LICENSING.md`, `assets/` and approved `data/` files. Without a token a workflow warns and stages committed snapshots under the same site scope without claiming a completed refresh. `data/wikidata_taxa.json` is *not* refreshed daily. DBGI starts daily at **08:30 Europe/Zurich**, subject to GitHub scheduling delays. The source repository itself contains the all-project snapshots for EMI; the DBGI Pages artifact—not the source repository—is garden-scoped.
 
 ## Contribute and learn more
 

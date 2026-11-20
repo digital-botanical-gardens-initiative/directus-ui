@@ -119,9 +119,11 @@
         typeof snapshot.sample_snapshot_generated_at !== "string" ||
         !Number.isFinite(Date.parse(snapshot.sample_snapshot_generated_at)) ||
         !Number.isSafeInteger(snapshot.total_field_rows) || snapshot.total_field_rows < 0 ||
-        !Number.isSafeInteger(snapshot.unlinked_named_samples) || snapshot.unlinked_named_samples < 0 ||
+        (snapshot.unlinked_named_samples !== null &&
+          (!Number.isSafeInteger(snapshot.unlinked_named_samples) || snapshot.unlinked_named_samples < 0)) ||
+        (snapshot.unlinked_named_samples === null && snapshot.site !== "dbgi") ||
         !Array.isArray(snapshot.collectors) || snapshot.total_field_rows < byId.size ||
-        snapshot.unlinked_named_samples > snapshot.total_field_rows) {
+        (snapshot.unlinked_named_samples !== null && snapshot.unlinked_named_samples > snapshot.total_field_rows)) {
       throw new Error("Invalid collector snapshot");
     }
     const people = new Map();
@@ -151,13 +153,13 @@
       }
       people.set(collector.id, collector);
     }
-    if (seenFields.size + snapshot.unlinked_named_samples > snapshot.total_field_rows) {
+    if (seenFields.size + (snapshot.unlinked_named_samples ?? 0) > snapshot.total_field_rows) {
       throw new Error("Collector totals exceed exported Field_Data");
     }
     return people;
   }
 
-  function create({leaderboardRoot, detailRoot, snapshot, byId, directusBase, resolveSpecies,
+  function create({leaderboardRoot, detailRoot, snapshot, byId, directusBase, gardens, resolveSpecies,
     renderScientificTaxon, loadLeaflet} = {}) {
     if (typeof resolveSpecies !== "function" || typeof renderScientificTaxon !== "function" ||
         typeof loadLeaflet !== "function" ||
@@ -165,9 +167,18 @@
       throw new TypeError("Collector views require roots and taxonomy/map helpers");
     }
     let people;
-    try { people = validate(snapshot, byId, directusBase); } catch { people = null; }
+    try {
+      people = validate(snapshot, byId, directusBase);
+      if (snapshot.site === "dbgi" && (!Array.isArray(gardens?.gardens) ||
+          [...byId.values()].some((row) => !gardens.gardens.some((garden) => garden.id === row[2])))) {
+        throw new Error("Incomplete botanical garden catalog");
+      }
+    } catch { people = null; }
     const ordered = people ? [...people.values()].sort((a, b) =>
       b.field_ids.length - a.field_ids.length || a.name.localeCompare(b.name) || a.id - b.id) : [];
+    const gardenNames = new Map(gardens?.gardens?.map((garden) => [garden.id, garden.name]));
+    const projectName = (id) => snapshot?.site === "dbgi" ? gardenNames.get(id) : id || "Not recorded";
+    const projectLabel = snapshot?.site === "dbgi" ? "Garden" : "Project";
     let activeMap;
     function hide() {
       activeMap?.destroy();
@@ -181,7 +192,8 @@
     function leaderboard() {
       if (!people) { unavailable(leaderboardRoot); return; }
       const section = node("section", "collectors");
-      section.append(node("p", "collectors__note",
+      section.append(node("p", "collectors__note", snapshot.unlinked_named_samples === null ?
+        "Counts include only published garden field samples linked to a People record. The number of samples with a recorded collector name but no People link is unknown within this garden-only snapshot; no names are attributed by spelling." :
         `Counts include only published Field_Data samples linked to a People record. ${countFormat.format(snapshot.unlinked_named_samples)} samples have a recorded collector name but no People link and are excluded, not attributed by spelling.`));
       if (!ordered.length) {
         section.append(node("p", "collectors__message", "No linked collector samples are available."));
@@ -329,8 +341,10 @@
         ["name-desc", "Sample name (Z–A)", id => byId.get(id)[1], true],
         ["field-asc", "Field name (A–Z)", id => byId.get(id)[3] || "", false],
         ["field-desc", "Field name (Z–A)", id => byId.get(id)[3] || "", true],
-        ["project-asc", "Project (A–Z)", id => byId.get(id)[2] || "", false],
-        ["project-desc", "Project (Z–A)", id => byId.get(id)[2] || "", true],
+        ["project-asc", `${projectLabel} (A–Z)`, id =>
+          snapshot.site === "dbgi" ? projectName(byId.get(id)[2]) : byId.get(id)[2] || "", false],
+        ["project-desc", `${projectLabel} (Z–A)`, id =>
+          snapshot.site === "dbgi" ? projectName(byId.get(id)[2]) : byId.get(id)[2] || "", true],
         ["date-asc", "Date (earliest first)", id => byId.get(id)[6] || "", false],
         ["date-desc", "Date (latest first)", id => byId.get(id)[6] || "", true],
       ];
@@ -349,7 +363,7 @@
       const table = node("table");
       const tableHead = node("thead");
       const headingRow = node("tr");
-      for (const title of ["Sample ID", "Observation subject", "Resolved CoL species", "Project", "Collection date"]) {
+      for (const title of ["Sample ID", "Observation subject", "Resolved CoL species", projectLabel, "Collection date"]) {
         const cell = node("th", null, title);
         cell.setAttribute("scope", "col");
         headingRow.append(cell);
@@ -382,7 +396,7 @@
           .filter((fieldId) => window.DBGIObservationSubject.matches(byId.get(fieldId)[9], subjectFilter.value));
         return filteredSorted(ids, sampleControls, fieldId => {
           const row = byId.get(fieldId);
-          return `${fieldId} ${row[1]} ${row[3] || ""} ${row[2] || ""} ${row[6] || ""} ${resolveSpecies(row[7])?.[2] || ""}`;
+          return `${fieldId} ${row[1]} ${row[3] || ""} ${projectName(row[2])} ${row[6] || ""} ${resolveSpecies(row[7])?.[2] || ""}`;
         }, sampleOptions, (a, b) => a - b);
       }
 
@@ -472,7 +486,7 @@
             identification.append(link);
           } else identification.textContent = "Not resolved to a species in Directus Taxa";
           card.append(identification, node("p", "collectors__sample-meta",
-            `Field name: ${row[3] || "Not recorded"} · Project: ${row[2] || "Not recorded"} · Date: ${row[6] || "Not recorded"}`));
+            `Field name: ${row[3] || "Not recorded"} · ${projectLabel}: ${projectName(row[2])} · Date: ${row[6] || "Not recorded"}`));
           const source = node("a", "collectors__sample-source", "Field_Data in Directus ↗");
           source.href = sourceUrl;
           source.target = "_blank";
@@ -493,7 +507,7 @@
             speciesCell.append(link);
           } else speciesCell.textContent = "—";
           record.append(sampleCell, window.DBGIObservationSubject.cell(row[9]), speciesCell,
-            node("td", null, row[2] || "—"), node("td", null, row[6] || "—"));
+            node("td", null, projectName(row[2])), node("td", null, row[6] || "—"));
           tableRows.push(record);
         }
         if (!cards.length) cards.push(node("li", "collectors__message", "No matching field samples."));

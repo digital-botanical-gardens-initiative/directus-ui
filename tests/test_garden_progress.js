@@ -55,6 +55,21 @@ test("profile-first stacked bars accompany cumulative collected, extracted and p
   assert.match(root.textContent, /1 profiled samples lack a linked extraction record/);
 });
 
+test("garden-only progress renders a garden header without promising omitted global aggregates", () => {
+  const root = new Node("section");
+  const scoped = {...sample, site: "dbgi", gardens: sample.gardens.map((garden, index) => ({
+    ...garden, id: `garden-${index}`, projects: [`garden-${index}`],
+  }))};
+  render(root, scoped);
+  assert.equal(root.findAll("thead")[0].findAll("th")[0].textContent, "Garden");
+  assert.match(root.textContent, /does not report counts of unlinked processing records or global record statuses/);
+  assert.doesNotMatch(root.textContent, /their counts and all record statuses are recorded in the downloadable snapshot/);
+  const emi = new Node("section");
+  render(emi, sample);
+  assert.equal(emi.findAll("thead")[0].findAll("th")[0].textContent, "Garden / project");
+  assert.match(emi.textContent, /their counts and all record statuses are recorded in the downloadable snapshot/);
+});
+
 test("missing lineage accounting and inconsistent stage totals fail closed", () => {
   const root = new Node("section");
   assert.throws(() => render(root, {...sample, ms_without_extraction_samples: undefined}), /Invalid garden progress snapshot/);

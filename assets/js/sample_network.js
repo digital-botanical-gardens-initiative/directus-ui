@@ -14,7 +14,7 @@ window.DBGISampleNetwork = (() => {
     return el;
   };
 
-  function build(rows, taxaById, gardens) {
+  function build(rows, taxaById, gardens, site) {
     if (!Array.isArray(rows) || !(taxaById instanceof Map)) throw new Error("Invalid Directus network snapshot");
     const nodes = new Map(), edges = [], edgeKeys = new Set();
     const create = (id, label, kind, row = null) => {
@@ -33,7 +33,7 @@ window.DBGISampleNetwork = (() => {
     const root = create("root", "All field samples", "root");
     const hubs = {
       taxonomy: create("hub:taxonomy", "Directus Taxa", "hub"),
-      gardens: create("hub:gardens", "Gardens and projects", "hub"),
+      gardens: create("hub:gardens", site === "dbgi" ? "Botanical gardens" : "Gardens and projects", "hub"),
       subject: create("hub:subject", "Observation subjects", "hub"),
       geography: create("hub:geography", "Recorded coordinates", "hub")
     };
@@ -85,21 +85,29 @@ window.DBGISampleNetwork = (() => {
         connect(hubs.taxonomy, unresolved, "unresolved Taxa");
       }
       const projectName = typeof row[2] === "string" && row[2].trim() ? row[2].trim() : null;
-      const project = create(`project:${projectName || ""}`, projectName || "No project recorded", "project");
-      project.count++;
-      connect(sample, project, "recorded project");
       const garden = aliases.get(projectName);
-      if (garden) {
+      if (site === "dbgi") {
+        if (!garden) throw new Error("Unknown botanical garden in scoped network");
         const gardenNode = create(`garden:${garden.id}`, garden.name, "garden");
         gardenNode.count++;
-        connect(project, gardenNode, "garden project");
         connect(sample, gardenNode, "botanical garden");
         connect(hubs.gardens, gardenNode, "garden");
       } else {
-        const other = create("garden:other", "Other projects / no garden", "garden-group");
-        other.count++;
-        connect(other, project, "other project");
-        connect(hubs.gardens, other, "other projects");
+        const project = create(`project:${projectName || ""}`, projectName || "No project recorded", "project");
+        project.count++;
+        connect(sample, project, "recorded project");
+        if (garden) {
+          const gardenNode = create(`garden:${garden.id}`, garden.name, "garden");
+          gardenNode.count++;
+          connect(project, gardenNode, "garden project");
+          connect(sample, gardenNode, "botanical garden");
+          connect(hubs.gardens, gardenNode, "garden");
+        } else {
+          const other = create("garden:other", "Other projects / no garden", "garden-group");
+          other.count++;
+          connect(other, project, "other project");
+          connect(hubs.gardens, other, "other projects");
+        }
       }
       const recordedSubject = typeof row[9] === "string" ? row[9].trim() : "";
       const subject = create(`subject:${recordedSubject}`, recordedSubject || "Not recorded", "subject");
@@ -219,14 +227,14 @@ window.DBGISampleNetwork = (() => {
     return {root, hubs, nodes, edges, search, scene};
   }
 
-  function mount(root, {rows, taxaById, gardens, directusBase, onBrowse} = {}) {
+  function mount(root, {rows, taxaById, gardens, site, directusBase, onBrowse} = {}) {
     root.replaceChildren();
-    const model = build(rows, taxaById, gardens), scene = model.scene();
+    const model = build(rows, taxaById, gardens, site), scene = model.scene();
     const controls = make("div", root, null, "network-controls");
     const startLabel = make("label", controls, "Explore");
     const start = make("select", startLabel);
     for (const [value, label] of [["root", "All relationships"], ["taxonomy", "Taxonomy"],
-      ["gardens", "Gardens / projects"], ["subject", "Observation subjects"], ["geography", "Locations"]]) {
+      ["gardens", site === "dbgi" ? "Botanical gardens" : "Gardens / projects"], ["subject", "Observation subjects"], ["geography", "Locations"]]) {
       const option = make("option", start, label); option.value = value;
     }
     const searchLabel = make("label", controls, "Find an entity");
@@ -283,7 +291,8 @@ window.DBGISampleNetwork = (() => {
         const row = node.row;
         property(list, "Directus Field_Data ID", row[0]);
         property(list, "Recorded field name", row[3]);
-        property(list, "Project", row[2]);
+        property(list, site === "dbgi" ? "Botanical garden" : "Project",
+          site === "dbgi" ? gardens?.gardens?.find((garden) => garden.id === row[2])?.name : row[2]);
         property(list, "Observation subject", row[9]);
         property(list, "Collection date", row[6]);
         property(list, "Recorded coordinates (lat, lon)",
@@ -293,7 +302,7 @@ window.DBGISampleNetwork = (() => {
         property(list, "Rank", node.row[4]);
         property(list, "Catalogue of Life usage ID", node.row[1]);
         property(list, "Authorship", node.row[3]);
-      } else if (node.kind === "garden") {
+      } else if (node.kind === "garden" && site !== "dbgi") {
         const garden = gardens?.gardens?.find((entry) => entry.id === node.id.slice(7));
         property(list, "Recorded project aliases", garden?.aliases?.join(" · "));
       } else if (node.kind === "project") {

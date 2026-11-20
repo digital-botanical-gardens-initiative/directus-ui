@@ -16,6 +16,7 @@ Noteworthy user- and contributor-visible changes go under **Unreleased** until a
 
 - Browser JavaScript and CSS are organized under `assets/js/` and `assets/css/`, with Pages staging and test imports updated to match.
 - README now focuses on getting started and access requirements; detailed feature, provenance and privacy notes live in `docs/technical-reference.md`.
+- The DBGI Pages artifact now includes only the five botanical gardens and linked records, grouping documented Directus project aliases into garden identities; the Earth Metabolome artifact continues to publish all projects.
 
 ### Fixed
 

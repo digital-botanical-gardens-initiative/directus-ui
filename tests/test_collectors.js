@@ -54,11 +54,11 @@ function fixture(collectors = [
     unlinked_named_samples: 2, collectors,
   };
 }
-function ui(snapshot = fixture(), samples = byId, resolve = resolveSpecies) {
+function ui(snapshot = fixture(), samples = byId, resolve = resolveSpecies, gardens) {
   const leaderboardRoot = new Node("main");
   const detailRoot = new Node("main");
   return {leaderboardRoot, detailRoot,
-    view: create({leaderboardRoot, detailRoot, snapshot, byId: samples, directusBase: base,
+    view: create({leaderboardRoot, detailRoot, snapshot, byId: samples, directusBase: base, gardens,
       resolveSpecies: resolve, renderScientificTaxon: scientific, loadLeaflet: () => Promise.resolve()})};
 }
 
@@ -75,6 +75,22 @@ test("ranks distinct People identities and links only linked sample IDs", () => 
   assert.deepEqual(detailRoot.byClass("collectors__sample-link").map(link => link.href), ["#sample/82"]);
   assert.equal(detailRoot.byClass("collectors__sample-source")[0].href, `${base}/admin/content/Field_Data/82`);
   assert.equal(detailRoot.byClass("collectors__source")[0].href, `${base}/admin/content/People/12`);
+});
+
+test("garden-only collector snapshot accepts unknown unlinked count and displays named garden", () => {
+  const snapshot = {...fixture(), site: "dbgi", total_field_rows: byId.size, unlinked_named_samples: null};
+  const {view, leaderboardRoot, detailRoot} = ui(snapshot, byId, resolveSpecies,
+    {gardens: [{id: "Garden", name: "Botanical Garden of Fribourg"}]});
+  view.leaderboard();
+  assert.match(leaderboardRoot.textContent, /number of samples with a recorded collector name but no People link is unknown/);
+  assert.doesNotMatch(leaderboardRoot.textContent, /null samples|0 samples have a recorded collector name/);
+  view.detail(12);
+  detailRoot.byClass("collectors__tab--cards")[0].click();
+  assert.match(detailRoot.byClass("collectors__sample-meta")[0].textContent, /Garden: Botanical Garden of Fribourg/);
+  assert.equal(detailRoot.findAll("th").some((heading) => heading.textContent === "Garden"), true);
+  const invalid = ui({...fixture(), unlinked_named_samples: null});
+  invalid.view.leaderboard();
+  assert.match(invalid.leaderboardRoot.textContent, /Collector data is unavailable/);
 });
 
 test("verified Directus identities and DBGI team links appear on a collector card and detail without nesting links", () => {

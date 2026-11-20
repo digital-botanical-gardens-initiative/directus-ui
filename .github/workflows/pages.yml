@@ -15,5 +15,6 @@ jobs:
     uses: ./.github/workflows/publish-site.yml
     with:
       source_ref: ${{ github.sha }}
+      site: dbgi
     secrets:
       DIRECTUS_READ_TOKEN: ${{ secrets.DIRECTUS_READ_TOKEN }}
