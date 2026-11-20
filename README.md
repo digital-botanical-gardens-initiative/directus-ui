@@ -4,17 +4,21 @@ A shared, read-only static dashboard for Directus field samples. The **DBGI site
 
 **[DBGI · five gardens](https://www.dbgi.org/directus-ui/)** · **[EMI · all projects](https://www.earthmetabolome.org/directus-ui/)**
 
+Both sites share features and Directus exports, but have separate presentation: DBGI starts with five garden cards; EMI uses the Earth Metabolome banner and a project overview. On EMI, expand **DBGI** to choose one of its five gardens, or open a separate Fung, Champex gradient, ViNEsh, Macedonia or Manaslu project card. The other observed Directus projects remain available; presentation names do not replace their recorded project codes.
+
 ## Preview locally (no Directus account needed)
 
-Requirements: Python 3 for the local HTTP server. The site itself is plain HTML, CSS and JavaScript; no package install or build step.
+Requirements: Python 3 for the small stdlib-only staging command and local HTTP server. The site itself is plain HTML, CSS and JavaScript; no package install.
 
 ```sh
 git clone https://github.com/digital-botanical-gardens-initiative/directus-ui.git
 cd directus-ui
+python3 scripts/stage_site.py --site dbgi --output site-dbgi
+python3 scripts/stage_site.py --site emi --output site-emi
 python3 -m http.server 8000
 ```
 
-Open <http://localhost:8000/> for the unrestricted committed snapshot (EMI mode). To preview exactly what DBGI Pages publishes, run `python3 scripts/stage_site.py --site dbgi` first, then open <http://localhost:8000/site/> using the same local server. Do **not** open `index.html` with `file://`: browsers block its JSON requests. Internet access is needed only for external maps, images, weather and linked third-party services. The browser never authenticates to Directus or receives a Directus token.
+Open <http://localhost:8000/site-dbgi/> and <http://localhost:8000/site-emi/> to preview the two actual Pages variants. Committed `data/*.json` snapshots work without authentication; stage into fresh output directories. The root `index.html` is the shared DBGI-authored input and is **not** a faithful preview of EMI branding. Do **not** open a site with `file://`: browsers block its JSON requests. Internet access is needed only for external maps, images, weather and linked third-party services. The browser never authenticates to Directus or receives a Directus token.
 
 ## Directus access: what is actually required?
 
@@ -30,7 +34,7 @@ Only exported, reviewed fields are written to same-origin snapshots; credentials
 ## Where to work
 
 - `index.html`: static entry point and views.
-- `assets/js/`, `assets/css/`: browser code and styles; `assets/` also contains locally served images and portraits. Keep browser URLs relative to `index.html` and CSS image URLs relative to their stylesheet.
+- `assets/js/`, `assets/css/`: shared browser code and styles; `assets/` also contains the locally hosted DBGI and EMI hero images, marks, garden images and portraits. Keep browser URLs relative to `index.html` and CSS image URLs relative to their stylesheet.
 - `data/`: committed, reviewable full Directus-derived snapshots. **Edit `data/gardens.json` to assign each Directus project alias to exactly one of the five gardens** (e.g. `jbn`, `jbn-new` → Neuchâtel); the DBGI deployment uses this catalog to scope its published snapshots and replaces project codes with garden identities. `data/refresh.json` is a generated, ignored deployment marker. No visitor-facing credentials.
 - `scripts/`: Python exporters and the optional CoL → Wikidata reconciler.
 - `tests/`: Node.js browser-module tests and Python exporter tests.

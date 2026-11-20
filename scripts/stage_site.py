@@ -432,6 +432,28 @@ def dbgi_snapshots(source, root):
     return staged
 
 
+def emi_index(source):
+    """Rebrand the shared dashboard only in the published EMI HTML."""
+    replacements = (
+        ('<html lang="en">', '<html lang="en" data-site="emi">'),
+        ('<meta name="description" content="Explore DBGI samples collected in Directus, by project and taxon.">',
+         '<meta name="description" content="Explore Earth Metabolome Initiative field samples and projects in a read-only Directus snapshot.">'),
+        ('<title>DBGI · Sample explorer</title>',
+         '<title>Earth Metabolome Initiative · Sample explorer</title>\n'
+         '  <link rel="icon" type="image/png" href="assets/emi-logo.png">'),
+        ('<a class="brand" href="#home"><img src="assets/dbgi-icon.png" width="176" height="198" alt="" aria-hidden="true">DBGI <span>· Sample explorer</span></a>',
+         '<a class="brand" href="#home"><img src="assets/emi-logo.png" width="48" height="48" alt="" aria-hidden="true">EMI <span>· Sample explorer</span></a>'),
+        ('<p class="eyebrow">Digital Botanical Gardens Initiative</p><h1>Explore the living collection.</h1><p>Find a botanical sample, browse projects, and follow its recorded identity and location. A read-only view of Directus field data.</p>',
+         '<p class="eyebrow">Earth Metabolome Initiative</p><h1>Explore field samples across projects.</h1><p>Search the Directus field-data snapshot by sample, project, or recorded taxon; inspect each sample’s linked identity and location.</p>'),
+        ('<footer><div class="wrap">DBGI · <a href="https://www.dbgi.org/">dbgi.org</a> · Public, read-only field-data snapshot. <a href="https://github.com/digital-botanical-gardens-initiative/directus-ui">Source and refresh instructions</a> · <a href="LICENSING.md">Licenses and image credits</a></div></footer>',
+         '<footer><div class="wrap">Earth Metabolome Initiative · <a href="https://www.earthmetabolome.org/">earthmetabolome.org</a> · Public, read-only field-data snapshot. <a href="https://github.com/digital-botanical-gardens-initiative/directus-ui">Source and refresh instructions</a> · <a href="LICENSING.md">Licenses and image credits</a></div></footer>'),
+    )
+    for original, replacement in replacements:
+        require(source.count(original) == 1, f"Missing or ambiguous EMI branding anchor: {original[:70]}")
+        source = source.replace(original, replacement, 1)
+    return source
+
+
 def stage(site, output=ROOT / "site", root=ROOT):
     """Publish a whitelist of static assets; do not expose inputs or partial DBGI snapshots."""
     require(site in ("dbgi", "emi"), "Site must be dbgi or emi")
@@ -460,7 +482,11 @@ def stage(site, output=ROOT / "site", root=ROOT):
     with tempfile.TemporaryDirectory(prefix=".stage-site-", dir=output.parent) as temp:
         destination = Path(temp)
         for filename in STATIC_FILES:
-            shutil.copy2(root / filename, destination / filename)
+            if site == "emi" and filename == "index.html":
+                (destination / filename).write_text(
+                    emi_index((root / filename).read_text(encoding="utf-8")), encoding="utf-8")
+            else:
+                shutil.copy2(root / filename, destination / filename)
         portraits = ({Path(person["portrait"]).name for person in scoped["collectors"]["collectors"]
                       if "portrait" in person} if site == "dbgi" else None)
         def excluded_portraits(directory, names):

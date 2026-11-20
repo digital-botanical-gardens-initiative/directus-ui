@@ -22,8 +22,17 @@ class StageSiteTests(unittest.TestCase):
         (self.root / "assets" / "collectors").mkdir(parents=True)
         (self.root / "assets" / "js").mkdir()
         for name in stage_site.STATIC_FILES:
-            (self.root / name).write_bytes(("static:" + name).encode())
+            if name == "index.html":
+                (self.root / name).write_bytes((stage_site.ROOT / name).read_bytes())
+            else:
+                (self.root / name).write_bytes(("static:" + name).encode())
         (self.root / "assets" / "js" / "app.js").write_text("window.app = true;", encoding="utf-8")
+        (self.root / "assets" / "css").mkdir()
+        (self.root / "assets" / "css" / "hero.css").write_bytes(
+            (stage_site.ROOT / "assets" / "css" / "hero.css").read_bytes())
+        for image in ("emi-ecuador-river.webp", "emi-logo.png"):
+            (self.root / "assets" / image).write_bytes(
+                (stage_site.ROOT / "assets" / image).read_bytes())
         for ident in (5, 9):
             (self.root / "assets" / "collectors" / f"{ident}.webp").write_bytes(bytes([ident]))
         catalog = copy.deepcopy(json.loads((stage_site.ROOT / "data" / "gardens.json").read_text()))
@@ -156,13 +165,49 @@ class StageSiteTests(unittest.TestCase):
         self.assertEqual(json.loads((output / "data" / "refresh.json").read_text()), self.data["refresh"])
         self.assertEqual(data["collectors"]["sample_snapshot_generated_at"], samples["generated_at"])
 
+    def test_dbgi_keeps_original_index_and_brand_byte_for_byte(self):
+        original = (self.root / "index.html").read_bytes()
+        output = self.publish()
+        self.assertEqual((output / "index.html").read_bytes(), original)
+        self.assertIn(b'assets/dbgi-icon.png', original)
+        self.assertNotIn(b'data-site="emi"', original)
+
+    def test_emi_fails_closed_if_source_branding_anchor_disappears(self):
+        index = self.root / "index.html"
+        index.write_text(index.read_text(encoding="utf-8").replace(
+            '<h1>Explore the living collection.</h1>', '<h1>Changed heading</h1>'),
+            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Missing or ambiguous EMI branding anchor"):
+            self.publish("emi")
+        self.assertFalse((self.root / "site-emi").exists())
+
     def test_emi_copies_original_snapshots_and_assets_byte_for_byte(self):
         output = self.publish("emi")
         for name in (*stage_site.DATA_FILES, "refresh"):
             self.assertEqual((output / "data" / f"{name}.json").read_bytes(),
                              (self.root / "data" / f"{name}.json").read_bytes())
         for name in stage_site.STATIC_FILES:
+            if name == "index.html":
+                continue
             self.assertEqual((output / name).read_bytes(), (self.root / name).read_bytes())
+        html = (output / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<html lang="en" data-site="emi">', html)
+        self.assertIn('<title>Earth Metabolome Initiative · Sample explorer</title>', html)
+        self.assertIn('name="description" content="Explore Earth Metabolome Initiative field samples', html)
+        self.assertIn('href="assets/emi-logo.png"', html)
+        self.assertIn('<img src="assets/emi-logo.png" width="48" height="48"', html)
+        self.assertIn('>EMI <span>· Sample explorer</span></a>', html)
+        self.assertIn('<h1>Explore field samples across projects.</h1>', html)
+        self.assertIn('href="https://www.earthmetabolome.org/"', html)
+        self.assertIn('href="LICENSING.md"', html)
+        self.assertIn('Source and refresh instructions', html)
+        self.assertNotIn('assets/dbgi-icon.png', html)
+        self.assertNotIn('https://www.dbgi.org/', html)
+        self.assertIn('url("../emi-ecuador-river.webp")',
+                      (output / "assets" / "css" / "hero.css").read_text())
+        for image in ("emi-logo.png", "emi-ecuador-river.webp"):
+            self.assertEqual((output / "assets" / image).read_bytes(),
+                             (self.root / "assets" / image).read_bytes())
         self.assertTrue((output / "assets" / "collectors" / "9.webp").is_file())
         self.assertFalse((output / "scripts").exists())
 
@@ -229,6 +274,9 @@ class StageSiteTests(unittest.TestCase):
         self.assertFalse((emi / "data" / "refresh.json").exists())
         self.assertEqual((emi / "data" / "samples.json").read_bytes(),
                          (self.root / "data" / "samples.json").read_bytes())
+        self.assertIn('data-site="emi"', (emi / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual((dbgi / "index.html").read_bytes(),
+                         (self.root / "index.html").read_bytes())
 
     def test_missing_linked_portrait_is_rejected(self):
         (self.root / "assets" / "collectors" / "5.webp").unlink()

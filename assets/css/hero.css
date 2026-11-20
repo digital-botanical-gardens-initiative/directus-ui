@@ -1,4 +1,4 @@
-/* Homepage imagery: local DBGI photographs, with content always above a fixed contrast overlay. */
+/* Locally hosted DBGI/EMI homepage imagery with a contrast overlay. */
 .top .brand {
   display: inline-flex;
   align-items: center;
@@ -10,6 +10,12 @@
   width: auto;
   height: 2.125rem;
   flex: none;
+}
+html[data-site="emi"] {
+  --green: #574b1d;
+  --sage: #857852;
+  --orange: #e0ae49;
+  --soft: #fbf8ee;
 }
 
 .hero {
@@ -34,6 +40,11 @@
   background-image: url("../dbgi-metasequoia.webp");
   background-position: center 46%;
 }
+html[data-site="emi"] .hero-scene--metasequoia {
+  background-image: url("../emi-ecuador-river.webp");
+  background-position: center 52%;
+}
+
 @keyframes hero-banner-drift {
   from { transform: scale(1.025) translate3d(0, 0, 0); }
   to { transform: scale(1.1) translate3d(-1.5%, .75%, 0); }
@@ -46,6 +57,13 @@
   pointer-events: none;
   background: linear-gradient(90deg, rgb(14 32 21 / 88%) 0%, rgb(14 32 21 / 78%) 52%, rgb(14 32 21 / 56%) 100%);
 }
+html[data-site="emi"] .hero {
+  background: #17291c;
+}
+html[data-site="emi"] .hero::after {
+  background: linear-gradient(90deg, rgb(12 30 23 / 91%) 0%, rgb(12 30 23 / 78%) 52%, rgb(12 30 23 / 46%) 100%);
+}
+
 .hero .hero-inner {
   position: relative;
   z-index: 2;
@@ -57,6 +75,7 @@
 
 @media (max-width: 43rem) {
   .hero::after { background: rgb(14 32 21 / 82%); }
+  html[data-site="emi"] .hero::after { background: rgb(12 30 23 / 81%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .hero-scene { animation: none; transform: none; }

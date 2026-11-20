@@ -73,13 +73,12 @@ function element(tag, text, parent, className) {
 
 function projectName(value) { return value || "Unassigned"; }
 function projectMatches(project, scope) {
-  if (!scope) return true;
-  if (scope.startsWith("g:")) return gardenByProject.get(project)?.id === scope.slice(2);
-  return !dbgiGardenOnly() && scope.startsWith("p:") && (project || "") === scope.slice(2);
+  return window.EMIProjects.matches(project, scope, gardenByProject, dbgiGardenOnly());
 }
 function scopeName(scope) {
-  return scope.startsWith("g:") ? gardenById.get(scope.slice(2))?.name || "Unknown garden" :
-    projectName(scope.slice(2));
+  return scope === "dbgi" ? "DBGI botanical gardens" :
+    scope.startsWith("g:") ? gardenById.get(scope.slice(2))?.name || "Unknown garden" :
+      projectName(scope.slice(2));
 }
 function gardenOrProjectName(project) {
   return dbgiGardenOnly() ? gardenByProject.get(project)?.name || projectName(project) : projectName(project);
@@ -243,7 +242,7 @@ function show(view) {
     if (link.getAttribute("href") === `#${view}` || (view === "collector" && link.getAttribute("href") === "#collectors")) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
-  document.title = `${view === "home" ? "Sample explorer" : view[0].toUpperCase() + view.slice(1)} · DBGI`;
+  document.title = `${view === "home" ? "Sample explorer" : view[0].toUpperCase() + view.slice(1)} · ${dbgiGardenOnly() ? "DBGI" : "EMI"}`;
   if (view === "samples" && (msProfileIndex || processingIndex || msProfileError || processingError)) renderPage();
   if (view === "samples") void setSampleView(sampleView);
   if (view === "treemap" && treemapRoot) renderTreemap();
@@ -411,12 +410,17 @@ function summary() {
     element("strong", format(value), card);
     element("span", label, card);
   }
-  if (!gardenCatalog || !window.GardenBadges) {
+  if (!gardenCatalog || !window.GardenBadges || !window.EMIProjects) {
     $("featured").replaceChildren();
     element("p", "Garden badges are unavailable; sample records remain accessible.", $("featured"), "muted");
     return;
   }
-  window.GardenBadges.render($("featured"), gardenCatalog, gardenSummaries, (id) => {
+  if (!dbgiGardenOnly()) {
+    const heading = $("featured").previousElementSibling;
+    heading.querySelector("h2").textContent = "Projects";
+    heading.querySelector("a").textContent = "Compare projects and families →";
+  }
+  window.EMIProjects.render($("featured"), sampleSnapshot, gardenCatalog, gardenSummaries, (id) => {
     selectedTaxonId = null;
     selectedTreemapTaxa = null;
     $("project").value = `g:${id}`;
@@ -424,6 +428,9 @@ function summary() {
     $("query").value = "";
     filter();
     sampleView = "map";
+    location.hash = "#samples";
+  }, (scope) => {
+    browseSampleScope({project: scope});
     location.hash = "#samples";
   });
 }
@@ -1649,6 +1656,14 @@ async function load() {
       .map((group) => ({...group, key: `p:${group.name}`}))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     projects = [...gardenSummaries, ...otherProjects];
+    if (!dbgiGardenOnly()) {
+      const group = element("option", "DBGI · Five botanical gardens", $("project"));
+      group.value = "dbgi";
+      for (const id of ["taxon-project", "treemap-project"]) {
+        const option = element("option", "DBGI · Five botanical gardens", $(id));
+        option.value = "dbgi";
+      }
+    }
     families = [...familyGroups.values()].sort((a, b) => b.count - a.count || taxaById.get(a.id)[2].localeCompare(taxaById.get(b.id)[2]));
     for (const group of projects) {
       const option = element("option", projectName(group.name), $("project"));

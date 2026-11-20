@@ -1,0 +1,33 @@
+.emi-projects { margin-block: 1.5rem; }
+.emi-projects__list,
+.emi-projects__other-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.emi-projects__card {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--soft);
+}
+.emi-projects__card--dbgi { background: #f5f9f6; border-color: #b4cdc0; }
+.emi-projects__name { margin: 0 0 0.35rem; font-size: 1.2rem; }
+.emi-projects__code { margin: 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.emi-projects__count { margin: 0.8rem 0 0.5rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+.emi-projects__link { display: inline-block; font-weight: 600; }
+.emi-projects__toggle { cursor: pointer; color: var(--green); font-weight: 650; }
+.emi-projects__card--dbgi:has(.emi-projects__gardens[open]) { grid-column: 1 / -1; }
+.emi-projects__gardens { margin-top: 1rem; }
+.emi-projects__badges .garden-badges { margin-block: 0.8rem 0; }
+.emi-projects__badges .garden-badges__list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+.emi-projects__other { margin-top: 1.3rem; }
+.emi-projects__other-list { margin-top: 1rem; }
+@media (max-width: 38rem) {
+  .emi-projects__card { padding: 0.9rem; }
+  .emi-projects__list, .emi-projects__other-list { grid-template-columns: minmax(0, 1fr); }
+}

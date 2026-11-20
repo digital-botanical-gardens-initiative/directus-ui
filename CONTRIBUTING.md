@@ -38,10 +38,12 @@ Run from the repository root (Python **3.10+**, Node.js **20+**; no pip/npm depe
 ```sh
 python3 -m unittest discover -s tests
 node --test tests/test_*.js
+python3 scripts/stage_site.py --site dbgi --output site-dbgi
+python3 scripts/stage_site.py --site emi --output site-emi
 python3 -m http.server 8000
 ```
 
-Open <http://localhost:8000/> for the full EMI dataset; committed `data/*.json` snapshots work without authentication. For the actual DBGI publication scope, stage it first with `python3 scripts/stage_site.py --site dbgi` and open <http://localhost:8000/site/> using the same server; the grouping rules live in `data/gardens.json`. Check the route affected by your PR in **both** modes, not just its unit tests. When touching asset paths or Pages staging, also check that `index.html` loads all `assets/js/` and `assets/css/` files and the banner image; the [manual smoke list](docs/manual-checks.md) covers the main routes. A local `file://` preview cannot fetch snapshots. PR checks run Python and Node tests without Directus secrets; the separate Pages workflow deploys on `main`, daily, or by manual dispatch.
+Open <http://localhost:8000/site-dbgi/> and <http://localhost:8000/site-emi/>; committed `data/*.json` snapshots work without authentication. Stage into fresh directories to preview the exact Pages scopes, HTML identities and locally hosted banner images. `data/gardens.json` configures DBGI's five garden groups; the EMI homepage groups those gardens visually while preserving all original Directus project records. Check the route affected by your PR in **both** modes, not just its unit tests. When touching asset paths or Pages staging, verify that each staged `index.html` loads its `assets/js/`, `assets/css/` files and its own banner. The [manual smoke list](docs/manual-checks.md) covers the main routes. A local `file://` preview cannot fetch snapshots. PR checks run Python and Node tests without Directus secrets; the Pages workflow deploys on `main`, daily, or by manual dispatch.
 
 ## Directus access and refresh
 
